@@ -1,0 +1,4 @@
+class NodeFlow {
+    public:
+        NodeFlow();
+};
