@@ -1,3 +1,4 @@
 BUILD
 .mbed
 stm24256_eeprom_driver
+thingpilot_telemetry_formatter
