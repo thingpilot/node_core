@@ -2,3 +2,5 @@ BUILD
 .mbed
 stm24256_eeprom_driver
 thingpilot_telemetry_formatter
+tpl5010_watchdog_driver
+thingpilot_sara_n2
