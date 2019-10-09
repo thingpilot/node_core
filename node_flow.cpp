@@ -26,6 +26,10 @@
     _init_rtc();
     
     }
+
+/**
+ *
+ */   
  void NodeFlow::initialise()
 {   
     
@@ -34,21 +38,57 @@
     
     }
 
-int NodeFlow::next_reading_time(){
+/**
+ * This should only be use on first wakeup or reset device as it will ovewrite time and sensor Ids
+ */
+bool NodeFlow::registerSensor(const uint8_t sensorId=NULL,const uint8_t seadingTime=NULL)
+{
+    //Create an array of sensor ids with sensortypes in eeprom, with their reading time
 
-    int hcf_time=0;
-    /* 
+
+}
+
+/** 
     if its the first time (in case of reset set the value to the smallest directly)
     for each sensor calculate next reading time get the smallest 
     and set it as the next reading timer
-    */ 
-    return hcf_time;
+ */ 
+
+int NodeFlow::set_reading_time(int arr[],int n){
+
+//int array[]={0,0};   //each time the user creates a new sensor  
+int time_comparator=0; //time_comparator stored in eeprom, first value zero;
+
+    int temp=0;
+    for (int i=0; i<sizeof(arr); i++){
+        int temp=arr[i]-time_comparator;
+        if (temp>=arr[i] && arr[i]!=0){
+            temp=arr[i];   
+        }
+    time_comparator=temp;
+
+    }
+    return time_comparator;
+}
+/**
+ * 
+ */
+int NodeFlow::SensorHandler(){
+
+    
+
+
+
+}
+void NodeFlow::reset(){
+
 }
 
-void ModemSend(int time)
-{
+
+// void ModemSend(int time)
+// {
     
-}
+// }
 
 
 

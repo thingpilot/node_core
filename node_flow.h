@@ -29,11 +29,16 @@ enum WakeupType {
    WAKEUP_TIMER,
    WAKEUP_PIN
 };
+
+enum Status {
+    DEVICE_OK=0
+
+};
 /**
  * Type of sensors. This will be used for 
  */
 typedef enum {
-    TEMP_C, HMDTY_RH, LGHT_L, AUX, AUX_2, AUX_3, AUX_4
+    TEMP_C, HMDTY_RH, LIGHT_LX, PRESS_PA, AUX_2, AUX_3, AUX_4
 } sensor;
 
 /** Base class for the Nodeflow
@@ -59,20 +64,22 @@ class NodeFlow {
      * Start
      */
     virtual void start(); 
-    /**
-     * Sends an alive beat. The device is on and working kindoff beat (can be skipped)
-     */
-    bool alivebeat();
     
+
     /**
      * Return WakeupType. 
      */
      static WakeupType get_wakeup_type();
+     
 
      /**
-     * Reset. 
+     * Reset. Reset the eeprom to default 
      */
      virtual void reset();
+
+    /**
+     *  Configure Sleep
+     */
      /**
      *  Sets the device in standby mode. Handles the times, 
      *  @param periodic_intervals   Sets periodic time intervals for device to wakeup
@@ -81,10 +88,14 @@ class NodeFlow {
      *  ex. enter_standby(periodic_intervals, interrupt_sleep_time);
      */
 
-     void enter_standby(int periodic_intervals=NULL);
+     void enter_standby(int intervals=NULL);
      //void standby(int seconds, bool wkup_one, bool wkup_two);
 
-
+    /**
+     * Use this in case of constant periodic sensing from all sensors
+     * 
+     */
+     void setReportIntervalMinutes(int periodic_intervals=NULL);
     /**
      * Defines how long the device will ignore the interrupt after an interrupt goes off
      *
@@ -92,35 +103,33 @@ class NodeFlow {
      #if defined (MBED_INTERRUPTIN_H)  //if interrupt is defined 
      void set_max_interrupt_sleep(int interrupt_sleep_time=NULL);
      #endif
-
-    /**
-     *
-     */
-    void set_sensors(char my_node_id_1=NULL,char my_node_id_2=NULL,char my_node_id_3=NULL);
     
-    /** The sensors should present themselves before they start reporting sensor data to the controller. 
-     *  @param childSensorId - The unique child id you want to choose for the sensor connected to the thing pilot. Range 0-254.
+    
+    /** This should only be use on first wakeup or reset device as it will ovewrite time and sensor Ids 
+     *  The sensors should present themselves before they start reporting sensor data to the controller. 
+     *  @param SensorId - The unique id you want to choose for the sensor connected to the thing pilot. (ex Range 0-254)
      *  @param sensorType - The sensor type you want to create.
-     *  @param description An optional textual description of the attached sensor.
-     *  @param echo - Set this to true if you want destination node to echo the message back to this node. 
-     *  Default is not to request echo. If set to true, the final destination will echo back the contents of the message, 
-     *  triggering the receive() function on the original node with a copy of the message, with message.
-     *  isEcho() set to true and sender/destination switched.
      *
      *  Returns true if sensor is initialised
      */
-     virtual bool present(uint8_t childSensorId=NULL, uint8_t sensorType=NULL,uint8_t readingTime=NULL,
-                         const char *description=NULL, bool echo=false);
+    virtual bool registerSensor(const uint8_t sensorId=NULL, const uint8_t readingTime=NULL);
+    
+    int set_reading_time(int arr[],int n);
     /**
      * Calculates the next sensor reading timer
      * 
      */
-     int next_reading_time();
+     //int next_reading_time();
 
-     /**
-      *
-      */
-     int SensorsHandler();
+    /**
+     * Wait without setting the device to standby
+     */
+     void wait (const uint32_t waitingMS);
+
+    /** Check wich Sensors are set to be read
+     *  Return which sensors to be read, return next reading time for each
+     */
+     int  SensorsHandler();
 
      void TimeTriggerHandler();
 
@@ -133,11 +142,19 @@ class NodeFlow {
     //watchdog driver
     int ModemSend(int periodic_intervals);
 
+    //int SensorTimeArray[];
+    int NumOfSensors;
+    
+
     private:
 
     static RTC_HandleTypeDef RtcHandle;
     TPL5010 wdg;
     void _init_rtc();
+
+    int arr[]={0,0,0,0,0,0,0,0};
+    
+    int findSmallestElement(int array[], int (sizeof(array)) );
     
     
     
