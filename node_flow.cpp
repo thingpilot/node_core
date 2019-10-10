@@ -39,11 +39,11 @@
 /**
  * This should only be use on first wakeup or reset device as it will ovewrite time and sensor Ids
  */
-bool NodeFlow::registerSensor(const uint8_t sensorId=NULL,const uint8_t seadingTime=NULL)
-{
-    //Create an array of sensor ids with sensortypes in eeprom, with their reading time
+// bool NodeFlow::registerSensor(const uint8_t sensorId=NULL,const uint8_t seadingTime=NULL)
+// {
+//     //Create an array of sensor ids with sensortypes in eeprom, with their reading time
 
-}
+// }
 
 /** 
     if its the first time (in case of reset set the value to the smallest directly)
@@ -51,25 +51,25 @@ bool NodeFlow::registerSensor(const uint8_t sensorId=NULL,const uint8_t seadingT
     and set it as the next reading timer
  */ 
 
-int NodeFlow::set_reading_time(int arr[],int sizeofarray){
+int NodeFlow::set_reading_time(int arr[],int s){
 
 //int array[]={0,0};   //each time the user creates a new sensor  
     
-    int time_comparator=0; 
-    int temp=0;
+    // int time_comparator=0; 
+    // int temp=0;
 
     
-    int sizeofarray=sizeof(arr)/sizeof(arr[0]);
-    for (int i=0; i<=sizeofarray; i++){
-        //int temp=arr[i];
-        if (temp>=arr[i] && arr[i]!=0){
-            temp=arr[i];   
-        }
-    time_comparator=temp;
+    // int sizeofarray=sizeof(arr)/sizeof(arr[0]);
+    // for (int i=0; i<=sizeofarray; i++){
+    //     //int temp=arr[i];
+    //     if (temp>=arr[i] && arr[i]!=0){
+    //         temp=arr[i];   
+    //     }
+    // time_comparator=temp;
     //printf("\r\nMin: %d , %d",time_comparator, sizeofarray);
     //printf("\r\n %d",time_comparator);
-    } 
-    return time_comparator;
+    // } 
+    // return time_comparator;
 }
 /**
  * 

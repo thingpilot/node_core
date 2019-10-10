@@ -21,6 +21,7 @@
 #include "SaraN2.h"
 #include "LorawanTP.h"
 #include "rtc_api_hal.h"
+#include "board.h"
 
 
 enum WakeupType {
