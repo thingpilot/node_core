@@ -9,3 +9,4 @@ tpl5010_watchdog_driver
 thingpilot_sara_n2
 thingpilot_semtech_lora
 node_core_data_manager
+stm24256_eeprom_driver
