@@ -19,20 +19,37 @@ Serial pc(PC_TXD,PC_RXD);
  *  Initialise rtc and get_wakeup_type
  *  Must be called by the user ex. mydevice.Initialise();
  */
+
+ NodeFlow::NodeFlow(PinName write_control, PinName sda, PinName scl, int frequency_hz): 
+                         _dm(write_control, sda, scl, frequency_hz){
+
+ }
+
+
+NodeFlow::~NodeFlow() {
+
+
+}
+
+   
   void NodeFlow::start()
 {   
-    wdg.kick(); 
-    _init_rtc();
+    // wdg.kick(); 
+    // _init_rtc();
     
     }
 
 /**
  *
  */   
- void NodeFlow::initialise()
+ int NodeFlow::initialise()
 {   
-    wdg.kick(); 
-    _init_rtc();
+
+ int status = -1;
+ status=_dm.init_filesystem();
+ 
+   //wdg.kick(); 
+   // _init_rtc();
     
     }
 
@@ -140,75 +157,75 @@ enum Filenames
 };
 
 
- RTC_HandleTypeDef RtcHandle;
+ //RTC_HandleTypeDef RtcHandle;
 
-void NodeFlow::_init_rtc() {
-   PlatformMutex *mtx = new PlatformMutex;
-   mtx->lock();
-   rtc_init();
-   mtx->unlock();
-   delete(mtx);
-}
-void NodeFlow::SystemPower_Config() {
-   HAL_Init();
-   GPIO_InitTypeDef GPIO_InitStructure;
-   __HAL_RCC_PWR_CLK_ENABLE();
-   HAL_PWREx_EnableUltraLowPower();
-   HAL_PWREx_EnableFastWakeUp();
-   __HAL_RCC_WAKEUPSTOP_CLK_CONFIG(RCC_STOP_WAKEUPCLOCK_MSI);
-   __HAL_RCC_GPIOA_CLK_ENABLE();
-   __HAL_RCC_GPIOB_CLK_ENABLE();
-   __HAL_RCC_GPIOC_CLK_ENABLE();
-   __HAL_RCC_GPIOD_CLK_ENABLE();
-   __HAL_RCC_GPIOH_CLK_ENABLE();
-   __HAL_RCC_GPIOE_CLK_ENABLE();
-   GPIO_InitStructure.Pin = GPIO_PIN_All;
-   GPIO_InitStructure.Mode = GPIO_MODE_ANALOG;
-   GPIO_InitStructure.Pull = GPIO_NOPULL;
-   HAL_GPIO_Init(GPIOA, &GPIO_InitStructure);
-   HAL_GPIO_Init(GPIOB, &GPIO_InitStructure);
-   HAL_GPIO_Init(GPIOC, &GPIO_InitStructure);
-   HAL_GPIO_Init(GPIOD, &GPIO_InitStructure);
-   HAL_GPIO_Init(GPIOH, &GPIO_InitStructure);
-   HAL_GPIO_Init(GPIOE, &GPIO_InitStructure);
-   __HAL_RCC_GPIOA_CLK_DISABLE();
-   __HAL_RCC_GPIOB_CLK_DISABLE();
-   __HAL_RCC_GPIOC_CLK_DISABLE();
-   __HAL_RCC_GPIOD_CLK_DISABLE();
-   __HAL_RCC_GPIOH_CLK_DISABLE();
-   __HAL_RCC_GPIOE_CLK_DISABLE();
-}
+// void NodeFlow::_init_rtc() {
+//    PlatformMutex *mtx = new PlatformMutex;
+//    mtx->lock();
+//    rtc_init();
+//    mtx->unlock();
+//    delete(mtx);
+// }
+// void NodeFlow::SystemPower_Config() {
+//    HAL_Init();
+//    GPIO_InitTypeDef GPIO_InitStructure;
+//    __HAL_RCC_PWR_CLK_ENABLE();
+//    HAL_PWREx_EnableUltraLowPower();
+//    HAL_PWREx_EnableFastWakeUp();
+//    __HAL_RCC_WAKEUPSTOP_CLK_CONFIG(RCC_STOP_WAKEUPCLOCK_MSI);
+//    __HAL_RCC_GPIOA_CLK_ENABLE();
+//    __HAL_RCC_GPIOB_CLK_ENABLE();
+//    __HAL_RCC_GPIOC_CLK_ENABLE();
+//    __HAL_RCC_GPIOD_CLK_ENABLE();
+//    __HAL_RCC_GPIOH_CLK_ENABLE();
+//    __HAL_RCC_GPIOE_CLK_ENABLE();
+//    GPIO_InitStructure.Pin = GPIO_PIN_All;
+//    GPIO_InitStructure.Mode = GPIO_MODE_ANALOG;
+//    GPIO_InitStructure.Pull = GPIO_NOPULL;
+//    HAL_GPIO_Init(GPIOA, &GPIO_InitStructure);
+//    HAL_GPIO_Init(GPIOB, &GPIO_InitStructure);
+//    HAL_GPIO_Init(GPIOC, &GPIO_InitStructure);
+//    HAL_GPIO_Init(GPIOD, &GPIO_InitStructure);
+//    HAL_GPIO_Init(GPIOH, &GPIO_InitStructure);
+//    HAL_GPIO_Init(GPIOE, &GPIO_InitStructure);
+//    __HAL_RCC_GPIOA_CLK_DISABLE();
+//    __HAL_RCC_GPIOB_CLK_DISABLE();
+//    __HAL_RCC_GPIOC_CLK_DISABLE();
+//    __HAL_RCC_GPIOD_CLK_DISABLE();
+//    __HAL_RCC_GPIOH_CLK_DISABLE();
+//    __HAL_RCC_GPIOE_CLK_DISABLE();
+// }
 
 
- void NodeFlow::rtc_set_wake_up_timer_s(uint32_t delta) {
-   uint32_t clock = RTC_WAKEUPCLOCK_CK_SPRE_16BITS;
-   // HAL_RTCEx_SetWakeUpTimer_IT will assert that delta is 0xFFFF at max
-   if (delta > 0xFFFF) {
-       delta -= 0x10000;
-       clock = RTC_WAKEUPCLOCK_CK_SPRE_17BITS;
-   }
-   RtcHandle.Instance = RTC;
-   HAL_StatusTypeDef status = HAL_RTCEx_SetWakeUpTimer_IT(&RtcHandle, delta, clock);
-   if (status != HAL_OK) {
-       NVIC_SystemReset();
-    }
-}
-void NodeFlow::clear_uc_wakeup_flags() {
-   __HAL_RCC_CLEAR_RESET_FLAGS();
-   SET_BIT(PWR->CR, PWR_CR_CWUF);
-}
-static WakeupType get_wakeup_type() {
-   if(__HAL_RCC_GET_FLAG(RCC_FLAG_PINRST)) {
-       return WAKEUP_RESET;
-   }
-   if(READ_BIT(RTC->ISR, RTC_ISR_WUTF)) {
-       return WAKEUP_TIMER;
-   }
-   if(READ_BIT(PWR->CSR, PWR_CSR_WUF)) {
-       return WAKEUP_PIN;
-   }
-   return WAKEUP_RESET;
-}
+//  void NodeFlow::rtc_set_wake_up_timer_s(uint32_t delta) {
+//    uint32_t clock = RTC_WAKEUPCLOCK_CK_SPRE_16BITS;
+//    // HAL_RTCEx_SetWakeUpTimer_IT will assert that delta is 0xFFFF at max
+//    if (delta > 0xFFFF) {
+//        delta -= 0x10000;
+//        clock = RTC_WAKEUPCLOCK_CK_SPRE_17BITS;
+//    }
+//    RtcHandle.Instance = RTC;
+//    HAL_StatusTypeDef status = HAL_RTCEx_SetWakeUpTimer_IT(&RtcHandle, delta, clock);
+//    if (status != HAL_OK) {
+//        NVIC_SystemReset();
+//     }
+// }
+// void NodeFlow::clear_uc_wakeup_flags() {
+//    __HAL_RCC_CLEAR_RESET_FLAGS();
+//    SET_BIT(PWR->CR, PWR_CR_CWUF);
+// }
+// static WakeupType get_wakeup_type() {
+//    if(__HAL_RCC_GET_FLAG(RCC_FLAG_PINRST)) {
+//        return WAKEUP_RESET;
+//    }
+//    if(READ_BIT(RTC->ISR, RTC_ISR_WUTF)) {
+//        return WAKEUP_TIMER;
+//    }
+//    if(READ_BIT(PWR->CSR, PWR_CSR_WUF)) {
+//        return WAKEUP_PIN;
+//    }
+//    return WAKEUP_RESET;
+// }
 
 // void NodeFlow::standby(int seconds, bool wkup_one, bool wkup_two) {
 //    SystemPower_Config();

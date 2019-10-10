@@ -15,73 +15,71 @@
 
 /** Includes 
  */
-#include "TPL5010.h"
-#include "tformatter.h"
+//#include "TPL5010.h"
+//#include "tformatter.h"
 #include "DataManager.h"
 //#include "SaraN2.h"
-#include "LorawanTP.h"
-#include "rtc_api_hal.h"
+//#include "LorawanTP.h"
+//#include "rtc_api_hal.h"
 #include "board.h"
 
-
-enum WakeupType {
-    WAKEUP_RESET,
-    WAKEUP_TIMER,
-    WAKEUP_PIN
-    };
-
-/**/    
- 
 
 /** Base class for the Nodeflow
  */      
 class NodeFlow {
 
     public:
+
+    /**/ 
+    // enum WakeupType {
+    // WAKEUP_RESET,
+    // WAKEUP_TIMER,
+    // WAKEUP_PIN
+    // };
    /** Enum
     */            
     
-    enum {
-        NODE_FLOW_OK=0
-    };
+    // enum {
+    //     NODE_FLOW_OK=0
+    // };
    /**
     * Type of sensors. This will be used for 
     */
-    typedef enum {
-        TEMP_C, HMDTY_RH, LIGHT_LX, PRESS_PA, AUX_2, AUX_3, AUX_4
-    } sensor;
+    // typedef enum {
+    //     TEMP_C, HMDTY_RH, LIGHT_LX, PRESS_PA, AUX_2, AUX_3, AUX_4
+    // } sensor;
         
     /**
      * Constructor
      */
-    NodeFlow();  
+     NodeFlow(PinName write_control, PinName sda, PinName scl, int frequency_hz);
     
     /**
      * Destructor
      */
-    virtual ~NodeFlow();
+     ~NodeFlow();
     
     /**
      * Generic Initialise device, init_eeprom, set flag to debug mode
      */
-    virtual void initialise(); 
+     int initialise(); 
      /**
      * Start
      */
-    virtual void start(); 
+     void start(); 
     
 
     /**
      * Return WakeupType. 
      */
-     static WakeupType get_wakeup_type();
+     //static WakeupType get_wakeup_type();
 
      
 
      /**
      * Reset. Reset the eeprom to default 
      */
-     virtual void reset();
+     void reset();
 
     /**
      *  Configure Sleep
@@ -152,14 +150,9 @@ class NodeFlow {
     private:
 
     static RTC_HandleTypeDef RtcHandle;
-    TPL5010 wdg;
+    
     void _init_rtc();
 
-    
-    
-    
-    
-    
     
     /* Actions */
    // void init_eeprom(); from DataManager
@@ -168,8 +161,8 @@ class NodeFlow {
     
      float get_supply_voltage(); //treat as a sensor 
 
-     
-
+     //TPL5010 _wdg;
+     DataManager _dm;
 
 };
 
