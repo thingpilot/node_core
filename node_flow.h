@@ -22,30 +22,34 @@
 #include "LorawanTP.h"
 #include "rtc_api_hal.h"
 
-/** Enum
- */            
+
 enum WakeupType {
-   WAKEUP_RESET,
-   WAKEUP_TIMER,
-   WAKEUP_PIN
-};
+    WAKEUP_RESET,
+    WAKEUP_TIMER,
+    WAKEUP_PIN
+    };
 
-enum Status {
-    DEVICE_OK=0
-
-};
-/**
- * Type of sensors. This will be used for 
- */
-typedef enum {
-    TEMP_C, HMDTY_RH, LIGHT_LX, PRESS_PA, AUX_2, AUX_3, AUX_4
-} sensor;
+/**/    
+ 
 
 /** Base class for the Nodeflow
  */      
 class NodeFlow {
 
     public:
+   /** Enum
+    */            
+    
+    enum {
+        NODE_FLOW_OK=0
+    };
+   /**
+    * Type of sensors. This will be used for 
+    */
+    typedef enum {
+        TEMP_C, HMDTY_RH, LIGHT_LX, PRESS_PA, AUX_2, AUX_3, AUX_4
+    } sensor;
+        
     /**
      * Constructor
      */
@@ -70,6 +74,7 @@ class NodeFlow {
      * Return WakeupType. 
      */
      static WakeupType get_wakeup_type();
+
      
 
      /**
@@ -90,9 +95,7 @@ class NodeFlow {
 
      void enter_standby(int intervals=NULL);
      //void standby(int seconds, bool wkup_one, bool wkup_two);
-    int8_t _sleep	(	const uint32_t 	sleepingM, const uint8_t 	interrupt1 = INTERRUPT_NOT_DEFINED,
- 
-)	
+    int8_t _sleep	(	const uint32_t 	sleepingM, const uint8_t interrupt1 = INTERRUPT_NOT_DEFINED)	
     /**
      * Use this in case of constant periodic sensing from all sensors
      * 

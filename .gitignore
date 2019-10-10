@@ -1,5 +1,9 @@
-BUILD
+.build
 .mbed
+projectfiles
+*.py*
+mbed-os
+BUILD
 thingpilot_telemetry_formatter
 tpl5010_watchdog_driver
 thingpilot_sara_n2
