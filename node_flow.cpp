@@ -1,5 +1,9 @@
 #include "node_flow.h"
 
+
+int status = -1;
+Serial pc(PC_TXD, PC_RXD);
+
 NodeFlow::NodeFlow(PinName write_control, PinName sda, PinName scl, int frequency_hz): 
  DataManager(write_control, sda, scl, frequency_hz) {
 
@@ -57,7 +61,25 @@ enum Filenames
 };
 
 int NodeFlow::initialise(){
- int status = -1;
+
+ 
  status=DataManager::init_filesystem();
- return 0;
+
+ bool initialised = false;
+ if(DataManager::is_initialised(initialised)!=true){
+    int status = -1;
+    status=DataManager::init_filesystem();
+    return 255;
+ }
+ //pc.printf("is_initialised status: %i, is initialised: %i\r\n", status, initialised);
+   else {
+       return 0;
+   }
+}
+
+int NodeFlow::get_global_stats() {
+    DataManager_FileSystem::GlobalStats_t g_stats;
+    status = DataManager::get_global_stats(g_stats.data);
+    DataManager::print_global_stats(pc, g_stats);
+
 }

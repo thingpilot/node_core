@@ -11,7 +11,7 @@ class NodeFlow: public DataManager{
 
     int initialise(); 
 
-    
+    int get_global_stats();
 
 
 
