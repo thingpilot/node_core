@@ -95,7 +95,7 @@ class NodeFlow {
 
      void enter_standby(int intervals=NULL);
      //void standby(int seconds, bool wkup_one, bool wkup_two);
-    int8_t _sleep	(	const uint32_t 	sleepingM, const uint8_t interrupt1 = INTERRUPT_NOT_DEFINED)	
+    int8_t _sleep	(const uint32_t 	sleepingM, const uint8_t interrupt1 =NULL);	
     /**
      * Use this in case of constant periodic sensing from all sensors
      * 
@@ -154,7 +154,7 @@ class NodeFlow {
     TPL5010 wdg;
     void _init_rtc();
 
-    int arr[]={0,0,0,0,0,0,0,0};
+    
     
     
     
