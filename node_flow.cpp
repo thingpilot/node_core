@@ -96,6 +96,7 @@ enum Filenames
 int NodeFlow::start(){
 
     initialise();
+    return 0;
 }
 
 int NodeFlow::initialise(){
@@ -104,15 +105,16 @@ int NodeFlow::initialise(){
  status=DataManager::init_filesystem();
 
  bool initialised = false;
+
  if(DataManager::is_initialised(initialised)!=true){
  pc.printf("Filesystem initialisation failed");   
     return 255;
  }
  //
    else {
-       pc.printf("init_filesystem status: %i\r\n", status);
-       return status;
+       pc.printf("init_filesystem status: %i\r\n", status);   
    }
+    return status;
 }
 
 int NodeFlow::get_global_stats() {
@@ -155,11 +157,14 @@ int NodeFlow::add_data_config_file(uint16_t entries_to_store,uint16_t device_id,
     
 return status;
 }
+
+
 /*Device config, Sensor_1-8*/
  int NodeFlow::get_file_parameters(uint8_t filename, DataManager_FileSystem::File_t &file){
     
-    status = DataManager::get_file_by_name(filename, file);
-    DataManager::print_file(pc, file);
+    // status = DataManager::get_file_by_name(filename, file);
+    // DataManager::print_file(pc, file);
+    return status;
  }
 
  int NodeFlow::add_sensors( uint16_t device_id[],uint16_t device_type[],uint16_t reading_time[],
@@ -167,36 +172,37 @@ return status;
   
     if (number_of_sensors>8){
         pc.printf("Error more than 8 sensors %i\r\n", status);   
-        return -1; 
+        
     }
 
     else {
-    for (int i=0; i<=number_of_sensors; i++){
-    DataManager_FileSystem::File_t SensorConfig_File_t;
-    SensorConfig_File_t.parameters.filename = SensorConfig_n;
-    SensorConfig_File_t.parameters.length_bytes = sizeof(SensorConfig::parameters);
+        for (int i=0; i<=number_of_sensors; i++){
+            DataManager_FileSystem::File_t SensorConfig_File_t;
+            SensorConfig_File_t.parameters.filename = SensorConfig_n;
+            SensorConfig_File_t.parameters.length_bytes = sizeof(SensorConfig::parameters);
 
-     if(DataManager::add_file(SensorConfig_File_t, 1)!=0){
-        pc.printf("Unsuccess! status: %i\r\n", status);
-     }
+            if(DataManager::add_file(SensorConfig_File_t, 1)!=0){
+                pc.printf("Unsuccess! status: %i\r\n", status);
+            }
 
-     else{
-        pc.printf("add_file status: %i\r\n", status);
-        
-        DeviceConfig s_conf;
-        s_conf.parameters.device_id = device_id[i];
-        s_conf.parameters.device_type = device_type[i];
-         s_conf.parameters.time_comparator=reading_time[i];
-       
-        for(int i = 0; i < 2; i++){
-        s_conf.parameters.device_id = i;
-        status = DataManager::append_file_entry(SensorConfig_n, s_conf.data, sizeof(s_conf.parameters));
-        pc.printf("append_file_entry attempt %i status: %i\r\n", i, status);
-        }    
-     }
+            else{
+                pc.printf("add_file status: %i\r\n", status);
+                
+                SensorConfig s_conf;
+                s_conf.parameters.device_id = device_id[i];
+                s_conf.parameters.device_type = device_type[i];
+                s_conf.parameters.time_comparator=reading_time[i];
+            
+                for(int i = 0; i < 2; i++){
+                s_conf.parameters.device_id = i;
+                status = DataManager::append_file_entry(SensorConfig_n, s_conf.data, sizeof(s_conf.parameters));
+                pc.printf("append_file_entry attempt %i status: %i\r\n", i, status);
+                }    
+            }
+        }
+    
     }
      return status;
-    }
 }
 
 
