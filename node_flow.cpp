@@ -67,8 +67,7 @@ int NodeFlow::initialise(){
 
  bool initialised = false;
  if(DataManager::is_initialised(initialised)!=true){
-    int status = -1;
-    status=DataManager::init_filesystem();
+   
     return 255;
  }
  //pc.printf("is_initialised status: %i, is initialised: %i\r\n", status, initialised);
@@ -81,5 +80,6 @@ int NodeFlow::get_global_stats() {
     DataManager_FileSystem::GlobalStats_t g_stats;
     status = DataManager::get_global_stats(g_stats.data);
     DataManager::print_global_stats(pc, g_stats);
-
+ 
+ return 0;
 }
