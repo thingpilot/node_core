@@ -21,7 +21,6 @@
  */
   void NodeFlow::start()
 {   
-    
     wdg.kick(); 
     _init_rtc();
     
@@ -32,7 +31,6 @@
  */   
  void NodeFlow::initialise()
 {   
-    
     wdg.kick(); 
     _init_rtc();
     
@@ -45,7 +43,6 @@ bool NodeFlow::registerSensor(const uint8_t sensorId=NULL,const uint8_t seadingT
 {
     //Create an array of sensor ids with sensortypes in eeprom, with their reading time
 
-
 }
 
 /** 
@@ -54,20 +51,24 @@ bool NodeFlow::registerSensor(const uint8_t sensorId=NULL,const uint8_t seadingT
     and set it as the next reading timer
  */ 
 
-int NodeFlow::set_reading_time(int arr[],int n){
+int NodeFlow::set_reading_time(int arr[],int sizeofarray){
 
 //int array[]={0,0};   //each time the user creates a new sensor  
-int time_comparator=0; //time_comparator stored in eeprom, first value zero;
-
+    
+    int time_comparator=0; 
     int temp=0;
-    for (int i=0; i<sizeof(arr); i++){
-        int temp=arr[i]-time_comparator;
+
+    
+    int sizeofarray=sizeof(arr)/sizeof(arr[0]);
+    for (int i=0; i<=sizeofarray; i++){
+        //int temp=arr[i];
         if (temp>=arr[i] && arr[i]!=0){
             temp=arr[i];   
         }
     time_comparator=temp;
-
-    }
+    //printf("\r\nMin: %d , %d",time_comparator, sizeofarray);
+    //printf("\r\n %d",time_comparator);
+    } 
     return time_comparator;
 }
 /**

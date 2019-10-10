@@ -90,7 +90,9 @@ class NodeFlow {
 
      void enter_standby(int intervals=NULL);
      //void standby(int seconds, bool wkup_one, bool wkup_two);
-
+    int8_t _sleep	(	const uint32_t 	sleepingM, const uint8_t 	interrupt1 = INTERRUPT_NOT_DEFINED,
+ 
+)	
     /**
      * Use this in case of constant periodic sensing from all sensors
      * 
@@ -139,12 +141,9 @@ class NodeFlow {
     void clear_uc_wakeup_flags();
     /**/
 
-    //watchdog driver
-    int ModemSend(int periodic_intervals);
-
-    //int SensorTimeArray[];
-    int NumOfSensors;
     
+    int ModemSend(uint8_t port,const uint8_t *data, uint8_t length,int periodic_intervals,int flags);
+
 
     private:
 
@@ -154,7 +153,7 @@ class NodeFlow {
 
     int arr[]={0,0,0,0,0,0,0,0};
     
-    int findSmallestElement(int array[], int (sizeof(array)) );
+    
     
     
     
