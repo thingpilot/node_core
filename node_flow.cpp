@@ -72,14 +72,16 @@ int NodeFlow::initialise(){
  }
  //pc.printf("is_initialised status: %i, is initialised: %i\r\n", status, initialised);
    else {
-       return 0;
+       return status;
    }
 }
 
 int NodeFlow::get_global_stats() {
     DataManager_FileSystem::GlobalStats_t g_stats;
+
+
     status = DataManager::get_global_stats(g_stats.data);
     DataManager::print_global_stats(pc, g_stats);
  
- return 0;
+ return status;
 }
