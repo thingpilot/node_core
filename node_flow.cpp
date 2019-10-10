@@ -13,7 +13,7 @@
 /** Includes 
  */
 #include "node_flow.h"
-
+Serial pc(PC_TXD,PC_RXD);
 /**
  *  Initialise device, sets default configuration where needed,
  *  Initialise rtc and get_wakeup_type
@@ -74,7 +74,7 @@ int NodeFlow::set_reading_time(int arr[],int s){
 /**
  * 
  */
-int NodeFlow::SensorHandler(){
+int NodeFlow::SensorsHandler(){
 
     
 
@@ -210,29 +210,29 @@ static WakeupType get_wakeup_type() {
    return WAKEUP_RESET;
 }
 
-void NodeFlow::standby(int seconds, bool wkup_one, bool wkup_two) {
-   SystemPower_Config();
-   core_util_critical_section_enter();
-   clear_uc_wakeup_flags();
-   // Enable wakeup timer.
-   rtc_set_wake_up_timer_s(seconds);
-   if(wkup_one) {
-       HAL_PWR_EnableWakeUpPin(PWR_WAKEUP_PIN1);
-   }
-   else {
-       HAL_PWR_DisableWakeUpPin(PWR_WAKEUP_PIN1);
-   }
-   if(wkup_two) {
-       HAL_PWR_EnableWakeUpPin(PWR_WAKEUP_PIN2);
-   }
-   else {
-       HAL_PWR_DisableWakeUpPin(PWR_WAKEUP_PIN2);
-   }
-   HAL_PWR_EnterSTANDBYMode();
-   // this should not happen...
-   //rtc_deactivate_wake_up_timer();
-   core_util_critical_section_exit();
-   // something went wrong, let's reset
-   NVIC_SystemReset();
-}
+// void NodeFlow::standby(int seconds, bool wkup_one, bool wkup_two) {
+//    SystemPower_Config();
+//    core_util_critical_section_enter();
+//    clear_uc_wakeup_flags();
+//    // Enable wakeup timer.
+//    rtc_set_wake_up_timer_s(seconds);
+//    if(wkup_one) {
+//        HAL_PWR_EnableWakeUpPin(PWR_WAKEUP_PIN1);
+//    }
+//    else {
+//        HAL_PWR_DisableWakeUpPin(PWR_WAKEUP_PIN1);
+//    }
+//    if(wkup_two) {
+//        HAL_PWR_EnableWakeUpPin(PWR_WAKEUP_PIN2);
+//    }
+//    else {
+//        HAL_PWR_DisableWakeUpPin(PWR_WAKEUP_PIN2);
+//    }
+//    HAL_PWR_EnterSTANDBYMode();
+//    // this should not happen...
+//    //rtc_deactivate_wake_up_timer();
+//    core_util_critical_section_exit();
+//    // something went wrong, let's reset
+//    NVIC_SystemReset();
+// }
 
