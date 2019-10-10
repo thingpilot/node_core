@@ -185,12 +185,12 @@ return status;
         
         DeviceConfig s_conf;
         s_conf.parameters.device_id = device_id[i];
-        s_conf.parameters.device_type = device_type[1];
+        s_conf.parameters.device_type = device_type[i];
          s_conf.parameters.time_comparator=reading_time[i];
        
         for(int i = 0; i < 2; i++){
         s_conf.parameters.device_id = i;
-        status = DataManager::append_file_entry(DeviceConfig_n, s_conf.data, sizeof(s_conf.parameters));
+        status = DataManager::append_file_entry(SensorConfig_n, s_conf.data, sizeof(s_conf.parameters));
         pc.printf("append_file_entry attempt %i status: %i\r\n", i, status);
         }    
      }
