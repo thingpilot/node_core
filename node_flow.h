@@ -1,7 +1,8 @@
+#include "mbed.h"
 #include "DataManager.h"
 #include "board.h"
 
-class NodeFlow {
+class NodeFlow: public DataManager{
 
     public: 
     NodeFlow(PinName write_control, PinName sda, PinName scl, int frequency_hz);
@@ -11,7 +12,7 @@ class NodeFlow {
     int initialise(); 
 
     
-    DataManager _dm;
+
 
 
     

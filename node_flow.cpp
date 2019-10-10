@@ -1,18 +1,18 @@
 #include "node_flow.h"
 
 NodeFlow::NodeFlow(PinName write_control, PinName sda, PinName scl, int frequency_hz): 
-                         _dm(write_control, sda, scl, frequency_hz){
+ DataManager(write_control, sda, scl, frequency_hz) {
 
  }
 
 
-NodeFlow::~NodeFlow() {
+ NodeFlow::~NodeFlow() {
 
 
-}
+ }
 
 
-union DeviceConfig
+    union DeviceConfig
 {
     struct 
     {
@@ -58,8 +58,6 @@ enum Filenames
 
 int NodeFlow::initialise(){
  int status = -1;
- status=_dm.init_filesystem();
- 
-
-    
+ status=DataManager::init_filesystem();
+ return 0;
 }
