@@ -12,10 +12,12 @@
     WAKEUP_PIN      =35
     };
 
-class NodeFlow: public DataManager{
+class NodeFlow: public DataManager{ //, public TPL5010{
 
     public: 
     NodeFlow(PinName write_control, PinName sda, PinName scl, int frequency_hz);
+
+    
 
     ~NodeFlow();
 
@@ -56,7 +58,7 @@ class NodeFlow: public DataManager{
     
     /** Wakeup/time 
      */
-   
+    
     void _init_rtc();
     void   SystemPower_Config();
     static void rtc_set_wake_up_timer_s(uint32_t delta);
@@ -72,10 +74,7 @@ class NodeFlow: public DataManager{
     int add_data_config_file(uint16_t entries_to_store, uint16_t device_id,int timestamp,
                             uint16_t mode, uint16_t property, uint8_t flag,uint8_t cool);
 
-
     
-
     
-    TPL5010 wdg;
     
 };

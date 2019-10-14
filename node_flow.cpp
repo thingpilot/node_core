@@ -3,6 +3,7 @@
 
 int status = -1;
 Serial pc(PC_TXD, PC_RXD);
+TPL5010 wdg(PA_10);
 
 
 NodeFlow::NodeFlow(PinName write_control, PinName sda, PinName scl, int frequency_hz): 
@@ -84,6 +85,16 @@ union BatteryVoltage
 
     char data[sizeof(BatteryVoltage::parameters)];
 };
+union TimeConfig
+{
+    struct 
+    {
+        uint16_t time_comparator;
+        
+    } parameters;
+
+    char data[sizeof(TimeConfig::parameters)];
+};
 
 enum Filenames
 {
@@ -91,7 +102,8 @@ enum Filenames
     SensorA_n        = 1,
     SensorB_n        = 2,
     SensorConfig_n   = 3,
-    BatteryVoltage_n = 9   
+    BatteryVoltage_n = 9,  
+    TimeConfig_n     =10 
 };
 
 
@@ -101,7 +113,7 @@ enum Filenames
 int NodeFlow::start(){
 
  wdg.kick();
-// TPL5010::kick(); 
+
  _init_rtc();
 
  //WakeupType wkp;
@@ -109,17 +121,27 @@ int NodeFlow::start(){
  
  if (wkp==WAKEUP_PIN) {
     pc.printf("Already initialised, wakeup from pin %d\r\n", wkp);
-
+    //do some kind of logic
     
  }
  if (wkp==WAKEUP_TIMER) {
-    pc.printf("Already initialised");
+    pc.printf("\r\nAlready initialised\r\n");
+    //read flag sensors
     
  }
 
  else{
-    pc.printf("Initialising");
+    pc.printf("\n\rInitialising\n\r");
     initialise();
+
+    DataManager_FileSystem::File_t TimeConfig_File_t;
+    TimeConfig_File_t.parameters.filename = TimeConfig_n;
+    TimeConfig_File_t.parameters.length_bytes = sizeof(TimeConfig::parameters);
+    status = DataManager::add_file(TimeConfig_File_t, 1);
+    pc.printf("add_file status: %i\r\n", status);
+
+    TimeConfig t_conf;
+    t_conf.parameters.time_comparator=0;
     
  }
     return wkp;
@@ -250,9 +272,13 @@ return status;
 
 int NodeFlow::set_reading_time(uint16_t arr[], int n){
       //each time the user creates a new sensor  
-    
-    int time_comparator=0; 
-    int temp=0;
+
+ TimeConfig t_conf;
+ DataManager::read_file_entry(TimeConfig_n, 0, t_conf.data,sizeof(t_conf.parameters));
+
+ int time_comparator=t_conf.parameters.time_comparator; 
+ int temp=arr[0];
+
 
     
    // int sizeofarray=sizeof(arr)/sizeof(arr[0]);
@@ -262,10 +288,15 @@ int NodeFlow::set_reading_time(uint16_t arr[], int n){
             temp=arr[i];   
         }
     time_comparator=temp;
-    printf("\r\nMin: %d , %d",time_comparator, n);
-    printf("\r\n %d",time_comparator);
+
     } 
+
+   
+    t_conf.parameters.time_comparator=time_comparator;
+
     return time_comparator;
+    pc.printf("\r\nMin: %d ,No of sensors: %d\r\n",time_comparator, n);
+    
 
 }
 
