@@ -116,13 +116,14 @@ int NodeFlow::initialise(){
  status=DataManager::is_initialised(initialised);
  if(status!=0){
  pc.printf("Filesystem initialisation failed. status: %i, is initialised: %i\r\n", status, initialised);   
-    return status;
+    
  }
  //
    else {
        pc.printf("init_filesystem status: %i\r\n", status);   
    }
-    return status;
+
+return status;
 }
 
 int NodeFlow::get_global_stats() {
@@ -300,7 +301,7 @@ static WakeupType get_wakeup_type() {
 }
 
 int NodeFlow:: enter_standby(int intervals) {
-
+return 0;
 }
 // void NodeFlow::standby(int seconds, bool wkup_one, bool wkup_two) {
 //    SystemPower_Config();
