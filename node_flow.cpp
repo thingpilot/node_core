@@ -106,8 +106,9 @@ int NodeFlow::initialise(){
 
  bool initialised = false;
 
- if(DataManager::is_initialised(initialised)!=true){
- pc.printf("Filesystem initialisation failed");   
+ status=DataManager::is_initialised(initialised);
+ if(status!=true){
+ pc.printf("Filesystem initialisation faileds_initialised status: %i, is initialised: %i\r\n", status, initialised);   
     return 255;
  }
  //
