@@ -4,12 +4,12 @@
 #include "rtc_api_hal.h"
 #include "TPL5010.h"
 
-/** Get wakeup type
- */ 
+  /** Get wakeup type
+     */ 
     enum WakeupType {
-    WAKEUP_RESET,
-    WAKEUP_TIMER,
-    WAKEUP_PIN
+    WAKEUP_RESET    =33,
+    WAKEUP_TIMER    =34,
+    WAKEUP_PIN      =35
     };
 
 class NodeFlow: public DataManager{
@@ -47,15 +47,16 @@ class NodeFlow: public DataManager{
      */
 
      int enter_standby(int intervals=NULL);
+     int standby(int seconds, bool wkup_one, bool wkup_two);
+     int get_wakeup_type();
+
+     int set_reading_time(uint16_t arr[],int n);
 
     private:
-    /**
-     * Return WakeupType. 
-     */
-    static WakeupType get_wakeup_type();
+    
     /** Wakeup/time 
      */
-    static RTC_HandleTypeDef RtcHandle;
+   
     void _init_rtc();
     void   SystemPower_Config();
     static void rtc_set_wake_up_timer_s(uint32_t delta);
@@ -75,6 +76,6 @@ class NodeFlow: public DataManager{
     
 
     
-    
+    TPL5010 _wdg;
     
 };

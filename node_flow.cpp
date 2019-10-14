@@ -100,14 +100,31 @@ enum Filenames
 
 int NodeFlow::start(){
 
+ _wdg.kick(); 
+ _init_rtc();
+
+ //WakeupType wkp;
+ int wkp=get_wakeup_type();
+ 
+ if (wkp==WAKEUP_PIN) {
+    pc.printf("Already initialised, wakeup from pin %d\r\n", wkp);
+
+    
+ }
+ if (wkp==WAKEUP_TIMER) {
+    pc.printf("Already initialised");
+    
+ }
+
+ else{
+    pc.printf("Initialising");
     initialise();
-    return 0;
+    
+ }
+    return wkp;
 }
 
 int NodeFlow::initialise(){
-
- int wkp=get_wakeup_type();
- pc.printf("Wakeup type status: %d\r\n", wkp);
  
  status=DataManager::init_filesystem();
 
@@ -212,7 +229,7 @@ return status;
                
                 status = DataManager::append_file_entry(SensorConfig_n, s_conf.data, sizeof(s_conf.parameters));
                 if(status!=0){
-                pc.printf("Error append_file_entry attempt %i status: %i\r\n", i, status);
+                pc.printf("Error append_file_entry No: %i status: %i\r\n", i, status);
                 
                 }
                 else{
@@ -228,6 +245,27 @@ return status;
     }
      get_global_stats();
      return status;
+}
+
+int NodeFlow::set_reading_time(uint16_t arr[], int n){
+      //each time the user creates a new sensor  
+    
+    int time_comparator=0; 
+    int temp=0;
+
+    
+   // int sizeofarray=sizeof(arr)/sizeof(arr[0]);
+    for (int i=0; i<=n; i++){
+        //int temp=arr[i];
+        if (temp>=arr[i] && arr[i]!=0){
+            temp=arr[i];   
+        }
+    time_comparator=temp;
+    printf("\r\nMin: %d , %d",time_comparator, n);
+    printf("\r\n %d",time_comparator);
+    } 
+    return time_comparator;
+
 }
 
 RTC_HandleTypeDef RtcHandle;
@@ -287,8 +325,9 @@ void NodeFlow::clear_uc_wakeup_flags() {
    __HAL_RCC_CLEAR_RESET_FLAGS();
    SET_BIT(PWR->CR, PWR_CR_CWUF);
 }
-static WakeupType get_wakeup_type() {
-   if(__HAL_RCC_GET_FLAG(RCC_FLAG_PINRST)) {
+
+int NodeFlow::get_wakeup_type(){
+ if(__HAL_RCC_GET_FLAG(RCC_FLAG_PINRST)) {
        return WAKEUP_RESET;
    }
    if(READ_BIT(RTC->ISR, RTC_ISR_WUTF)) {
@@ -298,36 +337,38 @@ static WakeupType get_wakeup_type() {
        return WAKEUP_PIN;
    }
    return WAKEUP_RESET;
+    
 }
+
 
 int NodeFlow:: enter_standby(int intervals) {
 return 0;
 }
-// void NodeFlow::standby(int seconds, bool wkup_one, bool wkup_two) {
-//    SystemPower_Config();
-//    core_util_critical_section_enter();
-//    clear_uc_wakeup_flags();
-//    // Enable wakeup timer.
-//    rtc_set_wake_up_timer_s(seconds);
-//    if(wkup_one) {
-//        HAL_PWR_EnableWakeUpPin(PWR_WAKEUP_PIN1);
-//    }
-//    else {
-//        HAL_PWR_DisableWakeUpPin(PWR_WAKEUP_PIN1);
-//    }
-//    if(wkup_two) {
-//        HAL_PWR_EnableWakeUpPin(PWR_WAKEUP_PIN2);
-//    }
-//    else {
-//        HAL_PWR_DisableWakeUpPin(PWR_WAKEUP_PIN2);
-//    }
-//    HAL_PWR_EnterSTANDBYMode();
-//    // this should not happen...
-//    //rtc_deactivate_wake_up_timer();
-//    core_util_critical_section_exit();
-//    // something went wrong, let's reset
-//    NVIC_SystemReset();
-// }
+int NodeFlow::standby(int seconds, bool wkup_one, bool wkup_two) {
+   SystemPower_Config();
+   core_util_critical_section_enter();
+   clear_uc_wakeup_flags();
+   // Enable wakeup timer.
+   rtc_set_wake_up_timer_s(seconds);
+   if(wkup_one) {
+       HAL_PWR_EnableWakeUpPin(PWR_WAKEUP_PIN1);
+   }
+   else {
+       HAL_PWR_DisableWakeUpPin(PWR_WAKEUP_PIN1);
+   }
+   if(wkup_two) {
+       HAL_PWR_EnableWakeUpPin(PWR_WAKEUP_PIN2);
+   }
+   else {
+       HAL_PWR_DisableWakeUpPin(PWR_WAKEUP_PIN2);
+   }
+   HAL_PWR_EnterSTANDBYMode();
+   // this should not happen...
+   //rtc_deactivate_wake_up_timer();
+   core_util_critical_section_exit();
+   // something went wrong, let's reset
+   NVIC_SystemReset();
+}
 
 
 
