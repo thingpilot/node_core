@@ -100,7 +100,8 @@ enum Filenames
 
 int NodeFlow::start(){
 
- _wdg.kick(); 
+ wdg.kick();
+// TPL5010::kick(); 
  _init_rtc();
 
  //WakeupType wkp;

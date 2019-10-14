@@ -76,6 +76,6 @@ class NodeFlow: public DataManager{
     
 
     
-    TPL5010 _wdg;
+    TPL5010 wdg;
     
 };
