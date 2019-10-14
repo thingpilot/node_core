@@ -1,6 +1,16 @@
 #include "mbed.h"
 #include "DataManager.h"
 #include "board.h"
+#include "rtc_api_hal.h"
+#include "TPL5010.h"
+
+/** Get wakeup type
+ */ 
+    enum WakeupType {
+    WAKEUP_RESET,
+    WAKEUP_TIMER,
+    WAKEUP_PIN
+    };
 
 class NodeFlow: public DataManager{
 
@@ -24,13 +34,36 @@ class NodeFlow: public DataManager{
      */
     int get_file_parameters(uint8_t filename, DataManager_FileSystem::File_t &file);
 
-    int add_sensors(uint16_t device_id[],uint16_t device_type[],uint16_t reading_time[],
-                    uint16_t number_of_sensors);
+    int add_sensors(uint8_t device_sn[],uint8_t device_type[],uint16_t reading_time[],
+                    size_t number_of_sensors);
 
 
+    /**
+     *  Sets the device in standby mode. Handles the times, 
+     *  @param periodic_intervals   Sets periodic time intervals for device to wakeup
+     *  periodic times must equal with the highest common factor
+     *  @param interrupt_sleep_time Sets time that the interrupt will sleep after first wakeup
+     *  ex. enter_standby(periodic_intervals, interrupt_sleep_time);
+     */
+
+     int enter_standby(int intervals=NULL);
 
     private:
-
+    /**
+     * Return WakeupType. 
+     */
+    static WakeupType get_wakeup_type();
+    /** Wakeup/time 
+     */
+    static RTC_HandleTypeDef RtcHandle;
+    void _init_rtc();
+    void   SystemPower_Config();
+    static void rtc_set_wake_up_timer_s(uint32_t delta);
+    void clear_uc_wakeup_flags();
+    /**
+     
+     */
+    int wakeup();
     /** Add a new file to EEPROM that only accepts a single entry.
      *  When adding a new file, despite the File_t type having many parameters,
      *   we only need to define the filename and length_bytes as shown
