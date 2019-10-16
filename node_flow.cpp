@@ -40,7 +40,6 @@ NodeFlow::NodeFlow(PinName write_control, PinName sda, PinName scl, int frequenc
 {
     struct 
     {   uint8_t device_id;
-        uint8_t device_sn;
         uint8_t device_type;
         uint16_t time_comparator; 
        
@@ -53,9 +52,10 @@ NodeFlow::NodeFlow(PinName write_control, PinName sda, PinName scl, int frequenc
 union SensorA
 {
     struct 
-    {
-        float value;
-        uint16_t device_type;
+    {   
+        uint8_t device_id;
+        uint8_t device_type;
+        uint16_t value;
         int timestamp;
     } parameters;
 
@@ -90,30 +90,56 @@ union TimeConfig
     struct 
     {
         uint16_t time_comparator;
+
         
     } parameters;
 
     char data[sizeof(TimeConfig::parameters)];
 };
 
+   union TempSensorConfig
+{
+    struct 
+    {   uint8_t  device_id;
+        uint16_t time_comparator; 
+       
+    
+    } parameters;
+
+    char data[sizeof(TempSensorConfig::parameters)];
+};
+
 enum Filenames
 {
-    DeviceConfig_n   = 0,
-    SensorA_n        = 1,
-    SensorB_n        = 2,
-    SensorConfig_n   = 3,
-    BatteryVoltage_n = 9,  
-    TimeConfig_n     =10 
+    DeviceConfig_n          = 0,
+    SensorA_n               = 1, //7 sensors
+    SensorB_n               = 2,
+    SensorC_n               = 3,
+    SensorD_n               = 4,
+    SensorE_n               = 5,
+    SensorF_n               = 6,
+    SensorG_n               = 7,
+    SensorConfig_n          = 8,
+    BatteryVoltage_n        = 9,  
+    TimeConfig_n            = 10,
+    TempSensorConfig_n      = 11
 };
+
+typedef enum {
+    TEMP_C          =0,
+    HUM_P           =1,
+    LIGHT_LX        =2,
+    CUSTOM_V        =3,
+    CUSTOM_U        =4
+}ValueType;
 
 
 
 
 
 int NodeFlow::start(){
-
+pc.printf("\r\n-------------------THING PILOT--------------------\r\n");
  wdg.kick();
-
  _init_rtc();
 
  //WakeupType wkp;
@@ -125,28 +151,40 @@ int NodeFlow::start(){
     
  }
  if (wkp==WAKEUP_TIMER) {
-    pc.printf("\r\nAlready initialised\r\n");
+    pc.printf("\r\nWakeup form timer\r\n");
     //read flag sensors
+
+    //wait_us(100000);
+    //isReadingTime(true);  
     
  }
 
- else{
-    pc.printf("\n\rInitialising\n\r");
+  if (wkp==WAKEUP_RESET) {
+    pc.printf("\r\n------------------INITIALISATION------------------\r\n");
     initialise();
 
     DataManager_FileSystem::File_t TimeConfig_File_t;
     TimeConfig_File_t.parameters.filename = TimeConfig_n;
     TimeConfig_File_t.parameters.length_bytes = sizeof(TimeConfig::parameters);
-    status = DataManager::add_file(TimeConfig_File_t, 1);
-    pc.printf("add_file status: %i\r\n", status);
+    
+    if (DataManager::add_file(TimeConfig_File_t, 1)!=0){
+        pc.printf("Time Config failed: %i\r\n", status);
+        return status;
+    }
 
     TimeConfig t_conf;
     t_conf.parameters.time_comparator=0;
+    DataManager::overwrite_file_entries(TimeConfig_n, t_conf.data, sizeof(t_conf.parameters));
     
  }
     return wkp;
 }
+bool NodeFlow::isReadingTime(int device_id){
 
+
+return true;
+
+}
 int NodeFlow::initialise(){
  
  status=DataManager::init_filesystem();
@@ -155,14 +193,9 @@ int NodeFlow::initialise(){
 
  status=DataManager::is_initialised(initialised);
  if(status!=0){
- pc.printf("Filesystem initialisation failed. status: %i, is initialised: %i\r\n", status, initialised);   
-    
+ pc.printf("Filesystem initialisation failed. status: %i, is initialised: %i\r\n", status, initialised);  
  }
- //
-   else {
-       pc.printf("init_filesystem status: %i\r\n", status);   
-   }
-
+ 
 return status;
 }
 
@@ -183,6 +216,7 @@ int NodeFlow::add_data_config_file(uint16_t entries_to_store,uint16_t device_id,
     DeviceConfig_File_t.parameters.filename = DeviceConfig_n;
     DeviceConfig_File_t.parameters.length_bytes = sizeof(DeviceConfig::parameters);
 
+    
      if(DataManager::add_file(DeviceConfig_File_t, entries_to_store)!=0){
         
          pc.printf("Unsuccess! status: %i\r\n", status);
@@ -208,7 +242,24 @@ int NodeFlow::add_data_config_file(uint16_t entries_to_store,uint16_t device_id,
     
 return status;
 }
+int NodeFlow::add_sensor_config_file(uint16_t entries_to_store){
 
+    DataManager_FileSystem::File_t SensorConfig_File_t;
+    SensorConfig_File_t.parameters.filename = SensorConfig_n;
+    SensorConfig_File_t.parameters.length_bytes = sizeof(SensorConfig::parameters);
+    status=DataManager::add_file(SensorConfig_File_t, entries_to_store);
+
+     if(status!=0){
+        
+         pc.printf("Unsuccess! status: %i\r\n", status);
+     }
+
+     else{
+        pc.printf("\r\nadd_file status: %i\r\n", status);
+     }
+    
+return status;
+}
 
 /*Device config, Sensor_1-8*/
  int NodeFlow::get_file_parameters(uint8_t filename, DataManager_FileSystem::File_t &file){
@@ -218,86 +269,148 @@ return status;
     return status;
  }
 
- int NodeFlow::add_sensors( uint8_t device_sn[],uint8_t device_type[],uint16_t reading_time[],
+ int NodeFlow::add_sensors( uint8_t device_id[],uint8_t device_type[],uint16_t reading_time[],
                              size_t number_of_sensors) {
   
-    get_global_stats();
-    if (number_of_sensors>8){
+  pc.printf("\r\n-------------------ADD SENSORS--------------------\r\n");
+   // get_global_stats();
+    if (number_of_sensors>7){
         status=-1; //change 
-        pc.printf("Error more than 8 sensors. Status %d \r\n", status);   
+        pc.printf("Error more than 7 sensors. Status %d \r\n", status);   
         
     }
 
     else {
-        DataManager_FileSystem::File_t SensorConfig_File_t;
-        SensorConfig_File_t.parameters.filename = SensorConfig_n;
-        SensorConfig_File_t.parameters.length_bytes = sizeof(SensorConfig::parameters);
-        status=DataManager::add_file(SensorConfig_File_t, number_of_sensors);
-        for (int i=0; i<number_of_sensors; i++){
+        
+    DataManager_FileSystem::File_t SensorConfig_File_t;
+    SensorConfig_File_t.parameters.filename = SensorConfig_n;
+    SensorConfig_File_t.parameters.length_bytes = sizeof(SensorConfig::parameters);
+    status=DataManager::add_file(SensorConfig_File_t, number_of_sensors);
 
-            if(status!=0){
-                pc.printf("Unsuccess! status: %i\r\n", status);
+    //at initialisation
+    DataManager_FileSystem::File_t TempSensorConfig_File_t;
+    TempSensorConfig_File_t.parameters.filename = TempSensorConfig_n;
+    TempSensorConfig_File_t.parameters.length_bytes = sizeof(TempSensorConfig::parameters);
+    status = DataManager::add_file(TempSensorConfig_File_t, number_of_sensors);
+
+        if(status!=0){
+             pc.printf("Unsuccess!! status: %i\r\n", status);
             }
 
-            else{
-                pc.printf("\r\nAdd_file status: %i\r\n", status);
-                
+        else{
+                   
+            for (int i=0; i<number_of_sensors; i++){
                 SensorConfig s_conf;
-                s_conf.parameters.device_id=i;
-                s_conf.parameters.device_sn = device_sn[i];
+                //s_conf.parameters.device_id=i;
+                s_conf.parameters.device_id = device_id[i];
                 s_conf.parameters.device_type =device_type[i];
                 s_conf.parameters.time_comparator=reading_time[i];
                
-            
-               
-                status = DataManager::append_file_entry(SensorConfig_n, s_conf.data, sizeof(s_conf.parameters));
+                DataManager::append_file_entry(SensorConfig_n, s_conf.data, sizeof(s_conf.parameters));
+
+                //temporary reading times
+                TempSensorConfig ts_conf;
+                ts_conf.parameters.device_id = device_id[i];
+                ts_conf.parameters.time_comparator=reading_time[i];
+        
+                status = DataManager::append_file_entry(TempSensorConfig_n, ts_conf.data, sizeof(ts_conf.parameters));
+                
+                
+
                 if(status!=0){
-                pc.printf("Error append_file_entry No: %i status: %i\r\n", i, status);
+                    pc.printf("Error append_file_entries No: %i status: %i\r\n", i, status);
                 
                 }
                 else{
-                status = DataManager::read_file_entry(SensorConfig_n, i, s_conf.data, sizeof(s_conf.parameters));
-                pc.printf("read_file_entry attempt %i status: %i\r\n", i, status);
-                pc.printf("device_id: %u\r\n", s_conf.parameters.device_id);
-                pc.printf("device_type: %i\r\n", s_conf.parameters.device_type);
-                pc.printf("time_comparator: %u\r\n", s_conf.parameters.time_comparator);
+            
+                status = DataManager::read_file_entry(TempSensorConfig_n, i, ts_conf.data, sizeof(ts_conf.parameters));
+                pc.printf("%d. Sensor device id: %i, wake up every: %u minutes\r\n",i, ts_conf.parameters.device_id,ts_conf.parameters.time_comparator);
+               
                 }
             }
         }
     
     }
-     get_global_stats();
+    pc.printf("--------------------------------------------------\r\n");
+   //  get_global_stats();
      return status;
 }
 
 int NodeFlow::set_reading_time(uint16_t arr[], int n){
-      //each time the user creates a new sensor  
+ 
+ 
+ pc.printf("\r\n-----------------NEXT READING TIME----------------\r\n");
 
+ TempSensorConfig ts_conf;
  TimeConfig t_conf;
- DataManager::read_file_entry(TimeConfig_n, 0, t_conf.data,sizeof(t_conf.parameters));
 
+ status=DataManager::read_file_entry(TimeConfig_n, 0, t_conf.data,sizeof(t_conf.parameters));
+ if (status!=0){
+     pc.printf("Error read_file_entry TimeConfig. status: %i\r\n", status);
+     return status;
+ }
  int time_comparator=t_conf.parameters.time_comparator; 
- int temp=arr[0];
 
-
+// pc.printf("\r\nTime comparator equals %d (should be zero at first)\r\n",time_comparator);
+ status=DataManager::read_file_entry(TempSensorConfig_n, 0, ts_conf.data, sizeof(ts_conf.parameters));
+ if (status!=0){
+     pc.printf("Error read_file_entry Temporary Config. status: %i\r\n", status);
+     return status;
+ }
+ int temp=ts_conf.parameters.time_comparator; //time_left for each sensor
     
    // int sizeofarray=sizeof(arr)/sizeof(arr[0]);
-    for (int i=0; i<=n; i++){
+ for (int i=0; i<n; i++){
+
+        DataManager::read_file_entry(TempSensorConfig_n, i, ts_conf.data, sizeof(ts_conf.parameters));
+        int dev_id=ts_conf.parameters.device_id;
+        int temp1=ts_conf.parameters.time_comparator;
+        int time_comparator_now= (temp1);//-time_comparator;
         //int temp=arr[i];
-        if (temp>=arr[i] && arr[i]!=0){
-            temp=arr[i];   
+
+        if (temp>=time_comparator_now && time_comparator_now!=0){
+            temp=time_comparator_now;   
         }
-    time_comparator=temp;
+
 
     } 
-
-   
+    time_comparator=temp;
+   // pc.printf("Time temp: %d\r\n", temp);
     t_conf.parameters.time_comparator=time_comparator;
-
-    return time_comparator;
-    pc.printf("\r\nMin: %d ,No of sensors: %d\r\n",time_comparator, n);
+    DataManager::overwrite_file_entries(TimeConfig_n, t_conf.data, sizeof(t_conf.parameters));
     
+    DataManager::read_file_entry(TimeConfig_n, 1, t_conf.data, sizeof(t_conf.parameters));
+    pc.printf("TimeConfig value: %u\n", t_conf.parameters.time_comparator);
 
+    for (int i=0; i<n; i++){
+
+        DataManager::read_file_entry(TempSensorConfig_n, i, ts_conf.data, sizeof(ts_conf.parameters));
+        pc.printf("%d. Sensor device id: %i, next reading: %u minutes\r\n",i, ts_conf.parameters.device_id,ts_conf.parameters.time_comparator);
+        
+        int dev_id=ts_conf.parameters.device_id;
+        int time_comp= ts_conf.parameters.time_comparator;
+        
+        ts_conf.parameters.device_id=dev_id;
+        ts_conf.parameters.time_comparator=time_comp-time_comparator;
+        
+       //i can't overwrite while reading the pointer is setting me at the first
+        if(i==0){
+        DataManager::overwrite_file_entries(TempSensorConfig_n, ts_conf.data, sizeof(ts_conf.parameters));   
+        }
+        status=DataManager::append_file_entry(TempSensorConfig_n, ts_conf.data, sizeof(ts_conf.parameters));
+    
+    }
+    for (int i=0; i<n; i++){
+    DataManager::read_file_entry(TempSensorConfig_n, i, ts_conf.data, sizeof(ts_conf.parameters));
+   // pc.printf("%d. Sensor device id: %i, next reading: %u minutes\r\n",i, ts_conf.parameters.device_id,ts_conf.parameters.time_comparator);
+   // pc.printf("Temporary comp %d stored: %u\r\n",i, ts_conf.parameters.time_comparator);
+    }
+
+    pc.printf("\r\nNext Reading time %d ,No of sensors: %d\r\n",time_comparator, n);
+    pc.printf("--------------------------------------------------\r\n");
+    
+    return time_comparator;
+    
 }
 
 RTC_HandleTypeDef RtcHandle;

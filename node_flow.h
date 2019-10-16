@@ -54,6 +54,8 @@ class NodeFlow: public DataManager{ //, public TPL5010{
 
      int set_reading_time(uint16_t arr[],int n);
 
+     bool isReadingTime(int device_id);
+
     private:
     
     /** Wakeup/time 
@@ -73,8 +75,34 @@ class NodeFlow: public DataManager{ //, public TPL5010{
      */
     int add_data_config_file(uint16_t entries_to_store, uint16_t device_id,int timestamp,
                             uint16_t mode, uint16_t property, uint8_t flag,uint8_t cool);
-
-    
-    
     
 };
+
+// class Sensor: public I2C
+
+// {
+// public:
+//  /*Status*/
+//     typedef int Sensor_Status_t;
+
+//         enum 
+//         {
+//             SENSOR_OK                            = 0, /**< enum value 1 */
+//             SENSOR_READ_FAIL                     = 1,
+//             SENSOR_WRITE_FAIL                    = 2,
+//             SENSOR_VERIFY_FAIL                   = 3,
+//             SENSOR_CHIP_ERROR                    = -255
+//         };
+// Sensor(int device_id);
+// //~Sensor(int device_id);
+
+// virtual int ReadSignature();
+// virtual float ReadValue()=0;
+// virtual unsigned long ReadDeviceId();
+
+// uint16_t read2Bytes(int chip_addr, int offset);
+
+// private: 
+// virtual bool isReadingTime()=0; //derived class defines if is reading time
+
+// };
