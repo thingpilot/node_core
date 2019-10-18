@@ -152,19 +152,28 @@ typedef enum {
 
 int NodeFlow::start(){
 pc.printf("\r\n-------------------THING PILOT--------------------\r\n");
- wdg.kick();
+  wdg.kick();
  _init_rtc();
-
- //WakeupType wkp;
- int wkp=get_wakeup_type();
  
+int wkp=get_wakeup_type();
+if (wkp==WAKEUP_SOFTWARE) {
+    pc.printf("\r\n--------------------SOFTWARE WAKEUP--------------------\r\n");
+    //do some kind of logic
+    
+ }
+
+ if (wkp==WAKEUP_LOWPOWER) {
+    pc.printf("\r\n--------------------LOW POwER WAKEUP--------------------\r\n");
+    //do some kind of logic
+    
+ }
  if (wkp==WAKEUP_PIN) {
-    pc.printf("Already initialised, wakeup from pin %d\r\n", wkp);
+    pc.printf("\r\n--------------------PIN WAKEUP--------------------\r\n");
     //do some kind of logic
     
  }
  if (wkp==WAKEUP_TIMER) {
-    pc.printf("\r\n------------------TIMER WAKEUP------------------\r\n");
+    pc.printf("\r\n-------------------TIMER WAKEUP-------------------\r\n");
     //read flag sensors
 
     //wait_us(100000);
@@ -172,7 +181,14 @@ pc.printf("\r\n-------------------THING PILOT--------------------\r\n");
     
  }
 
+ if (wkp==WAKEUP_UNKNOWN) {
+    pc.printf("\r\n--------------------UNKNOWN--------------------\r\n");
+    //do some kind of logic
+    
+ }
+
   if (wkp==WAKEUP_RESET) {
+    
     pc.printf("\r\n------------------INITIALISATION------------------\r\n");
     initialise();
 
@@ -180,18 +196,24 @@ pc.printf("\r\n-------------------THING PILOT--------------------\r\n");
     TimeConfig_File_t.parameters.filename = TimeConfig_n;
     TimeConfig_File_t.parameters.length_bytes = sizeof(TimeConfig::parameters);
     
-    if (DataManager::add_file(TimeConfig_File_t, 1)!=0){
+    status=DataManager::add_file(TimeConfig_File_t, 1);
+    if (status!=0){
         pc.printf("Time Config failed: %i\r\n", status);
         return status;
     }
 
     TimeConfig t_conf;
     t_conf.parameters.time_comparator=0;
-    DataManager::overwrite_file_entries(TimeConfig_n, t_conf.data, sizeof(t_conf.parameters));
-    
+    status= DataManager::overwrite_file_entries(TimeConfig_n, t_conf.data, sizeof(t_conf.parameters));
+    if (status!=0){
+        pc.printf("Time Config failed to overwrite: %i\r\n", status);
+        return status;
+    }
  }
+   
     return wkp;
 }
+
 bool NodeFlow::isReadingTime(int device_id){
 
 
@@ -255,24 +277,24 @@ int NodeFlow::add_data_config_file(uint16_t entries_to_store,uint16_t device_id,
     
 return status;
 }
-int NodeFlow::add_sensor_config_file(uint16_t entries_to_store){
+// int NodeFlow::add_sensor_config_file(uint16_t entries_to_store){
 
-    DataManager_FileSystem::File_t SensorConfig_File_t;
-    SensorConfig_File_t.parameters.filename = SensorConfig_n;
-    SensorConfig_File_t.parameters.length_bytes = sizeof(SensorConfig::parameters);
-    status=DataManager::add_file(SensorConfig_File_t, entries_to_store);
+//     DataManager_FileSystem::File_t SensorConfig_File_t;
+//     SensorConfig_File_t.parameters.filename = SensorConfig_n;
+//     SensorConfig_File_t.parameters.length_bytes = sizeof(SensorConfig::parameters);
+//     status=DataManager::add_file(SensorConfig_File_t, entries_to_store);
 
-     if(status!=0){
+//      if(status!=0){
         
-         pc.printf("Unsuccess! status: %i\r\n", status);
-     }
+//          pc.printf("Unsuccess! status: %i\r\n", status);
+//      }
 
-     else{
-        pc.printf("\r\nadd_file status: %i\r\n", status);
-     }
+//      else{
+//         pc.printf("\r\nadd_file status: %i\r\n", status);
+//      }
     
-return status;
-}
+// return status;
+// }
 
 /*Device config, Sensor_1-8*/
  int NodeFlow::get_file_parameters(uint8_t filename, DataManager_FileSystem::File_t &file){
@@ -337,7 +359,7 @@ return status;
                 else{
             
                 status = DataManager::read_file_entry(TempSensorConfig_n, i, ts_conf.data, sizeof(ts_conf.parameters));
-                pc.printf("%d. Sensor device id: %i, wake up every: %u minutes\r\n",i, ts_conf.parameters.device_id,ts_conf.parameters.time_comparator);
+                pc.printf("%d. Sensor device id: %i, wake up every: %u Seconds\r\n",i, ts_conf.parameters.device_id,ts_conf.parameters.time_comparator);
                
                 }
             }
@@ -377,26 +399,27 @@ int NodeFlow::set_reading_time(uint16_t arr[], int n){
    // int sizeofarray=sizeof(arr)/sizeof(arr[0]);
  for (int i=0; i<n; i++){
 
-        DataManager::read_file_entry(TempSensorConfig_n, i, ts_conf.data, sizeof(ts_conf.parameters));
+        status=DataManager::read_file_entry(TempSensorConfig_n, i, ts_conf.data, sizeof(ts_conf.parameters));
+        if (status!=0){
+            pc.printf("Error read_file_entry Temporary Config. status: %i\r\n", status);
+            return status;
+         }
         int dev_id=ts_conf.parameters.device_id;
         int temp1=ts_conf.parameters.time_comparator;
         int time_comparator_now= (temp1);//-time_comparator;
-        //int temp=arr[i];
 
         if (temp>=time_comparator_now && time_comparator_now!=0){
             temp=time_comparator_now;   
         }
 
-
     } 
     time_comparator=temp;
-   // pc.printf("Time temp: %d\r\n", temp);
+   
     t_conf.parameters.time_comparator=time_comparator;
     DataManager::overwrite_file_entries(TimeConfig_n, t_conf.data, sizeof(t_conf.parameters));
     
     DataManager::read_file_entry(TimeConfig_n, 1, t_conf.data, sizeof(t_conf.parameters));
     pc.printf("TimeConfig value: %u\n", t_conf.parameters.time_comparator);
-
 
     DataManager_FileSystem::File_t TempConfig_File_t;
     TempConfig_File_t.parameters.filename = TempConfig_n;
@@ -406,7 +429,7 @@ int NodeFlow::set_reading_time(uint16_t arr[], int n){
     for (int i=0; i<n; i++){
 
         DataManager::read_file_entry(TempSensorConfig_n, i, ts_conf.data, sizeof(ts_conf.parameters));
-        //pc.printf("%d. Sensor device id: %i, next reading: %u minutes\r\n",i, ts_conf.parameters.device_id,ts_conf.parameters.time_comparator);
+    
         
         int dev_id=ts_conf.parameters.device_id;
         int time_comp= ts_conf.parameters.time_comparator-time_comparator;
@@ -414,13 +437,13 @@ int NodeFlow::set_reading_time(uint16_t arr[], int n){
         tm_conf.parameters.device_id=dev_id;
         tm_conf.parameters.time_comparator=time_comp;
         if (time_comp==0){
-            DataManager::read_file_entry(SensorConfig_n, i, s_conf.data, sizeof(s_conf.parameters));
+            status=DataManager::read_file_entry(SensorConfig_n, i, s_conf.data, sizeof(s_conf.parameters));
             tm_conf.parameters.time_comparator=s_conf.parameters.time_comparator;
 
         }
-       //i can't overwrite while reading the pointer is setting me at the first
+       //i can't overwrite while reading the pointer is setting me at the first so i created a temporary config 
         if(i==0){
-        DataManager::overwrite_file_entries(TempConfig_n, tm_conf.data, sizeof(tm_conf.parameters));   
+        status=DataManager::overwrite_file_entries(TempConfig_n, tm_conf.data, sizeof(tm_conf.parameters));   
         }
         else{
         status=DataManager::append_file_entry(TempConfig_n, tm_conf.data, sizeof(tm_conf.parameters));
@@ -429,7 +452,7 @@ int NodeFlow::set_reading_time(uint16_t arr[], int n){
     for (int i=0; i<n; i++){
     DataManager::read_file_entry(TempConfig_n, i, tm_conf.data, sizeof(tm_conf.parameters));
     pc.printf("%d. Sensor device id: %i, next reading: %u seconds\r\n",i, tm_conf.parameters.device_id,tm_conf.parameters.time_comparator);
-   // pc.printf("Temporary comp %d stored: %u\r\n",i, ts_conf.parameters.time_comparator);
+   
     ts_conf.parameters.device_id=tm_conf.parameters.device_id;
     ts_conf.parameters.time_comparator=tm_conf.parameters.time_comparator;
 
@@ -516,7 +539,15 @@ int NodeFlow::get_wakeup_type(){
    if(READ_BIT(PWR->CSR, PWR_CSR_WUF)) {
        return WAKEUP_PIN;
    }
-   return WAKEUP_RESET;
+
+   if (__HAL_RCC_GET_FLAG(RCC_FLAG_SFTRST)) {
+       return WAKEUP_SOFTWARE;
+   }
+
+    if (__HAL_RCC_GET_FLAG(RCC_FLAG_LPWRRST)) {
+       return WAKEUP_LOWPOWER;
+   }
+   return WAKEUP_UNKNOWN;
     
 }
 
@@ -524,7 +555,7 @@ int NodeFlow::get_wakeup_type(){
 int NodeFlow:: enter_standby(int intervals) {
 return 0;
 }
-int NodeFlow::standby(int seconds, bool wkup_one, bool wkup_two) {
+void NodeFlow::standby(int seconds, bool wkup_one, bool wkup_two) {
    SystemPower_Config();
    core_util_critical_section_enter();
    clear_uc_wakeup_flags();

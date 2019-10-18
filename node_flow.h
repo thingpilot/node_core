@@ -7,9 +7,13 @@
   /** Get wakeup type
      */ 
     enum WakeupType {
-    WAKEUP_RESET    =33,
-    WAKEUP_TIMER    =34,
-    WAKEUP_PIN      =35
+    WAKEUP_RESET    ,
+    WAKEUP_TIMER    ,
+    WAKEUP_PIN      ,
+    WAKEUP_SOFTWARE ,
+    WAKEUP_LOWPOWER ,
+    WAKEUP_UNKNOWN  
+
     };
 
 class NodeFlow: public DataManager{ //, public TPL5010{
@@ -47,16 +51,16 @@ class NodeFlow: public DataManager{ //, public TPL5010{
      *  @param interrupt_sleep_time Sets time that the interrupt will sleep after first wakeup
      *  ex. enter_standby(periodic_intervals, interrupt_sleep_time);
      */
-
+    
      int enter_standby(int intervals=NULL);
-     int standby(int seconds, bool wkup_one, bool wkup_two);
-     int get_wakeup_type();
+     void standby(int seconds, bool wkup_one, bool wkup_two);
+    
 
      int set_reading_time(uint16_t arr[],int n);
 
      bool isReadingTime(int device_id);
 
-    private:
+    //private:
     
     /** Wakeup/time 
      */
@@ -65,6 +69,7 @@ class NodeFlow: public DataManager{ //, public TPL5010{
     void   SystemPower_Config();
     static void rtc_set_wake_up_timer_s(uint32_t delta);
     void clear_uc_wakeup_flags();
+    static int get_wakeup_type();
     /**
      
      */
