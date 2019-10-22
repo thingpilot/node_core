@@ -9,11 +9,7 @@
   /** Includes
  */
 #include "node_flow.h"
-#include "SX1276_LoRaRadio.h"
-#include "lorawan/LoRaWANInterface.h"
-#include "mbed.h"
-#include "rtc_api_hal.h"
-#include <string>
+
 
 /** Use the SX1276 Lora radio pins
  *
