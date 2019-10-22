@@ -1,2 +1,6 @@
 BUILD
 .mbed
+mbed-os
+node_core_data_manager
+stm24256_eeprom_driver
+tpl5010_watchdog_driver
