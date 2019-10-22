@@ -28,7 +28,7 @@ class NodeFlow: public DataManager{ //, public TPL5010{
 
     /** Check to see if filesystem is initialised
      */
-    int start();
+    int start(string device_id);
 
     int initialise(); 
 
@@ -70,16 +70,24 @@ class NodeFlow: public DataManager{ //, public TPL5010{
     static void rtc_set_wake_up_timer_s(uint32_t delta);
     void clear_uc_wakeup_flags();
     static int get_wakeup_type();
+    int get_timestamp();
     /**
      
      */
     int wakeup();
+
+    
     /** Add a new file to EEPROM that only accepts a single entry.
      *  When adding a new file, despite the File_t type having many parameters,
      *   we only need to define the filename and length_bytes as shown
      */
     int add_data_config_file(uint16_t entries_to_store, uint16_t device_id,int timestamp,
                             uint16_t mode, uint16_t property, uint8_t flag,uint8_t cool);
+    
+    int add_time_config_file();
+   
+   // int return_status(wchar_t filename);
+    
     
 };
 
