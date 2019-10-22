@@ -72,11 +72,13 @@ class NodeFlow: public DataManager{ //, public TPL5010{
      */
     
     void _init_rtc();
-    void   SystemPower_Config();
+    void SystemPower_Config();
     static void rtc_set_wake_up_timer_s(uint32_t delta);
     void clear_uc_wakeup_flags();
     static int get_wakeup_type();
     int get_timestamp();
+
+    void SystemClock_Config();
     /**
      
      */
