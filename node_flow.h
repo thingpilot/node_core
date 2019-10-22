@@ -3,6 +3,9 @@
 #include "board.h"
 #include "rtc_api_hal.h"
 #include "TPL5010.h"
+#include "LorawanTP.h"
+#include <string>
+
 
   /** Get wakeup type
      */ 

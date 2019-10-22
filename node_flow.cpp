@@ -9,17 +9,7 @@
   /** Includes
  */
 #include "node_flow.h"
-#include "SX1276_LoRaRadio.h"
-#include "lorawan/LoRaWANInterface.h"
-#include "mbed.h"
-#include "rtc_api_hal.h"
-#include <string>
 
-/** Use the SX1276 Lora radio pins
- *
- */
-SX1276_LoRaRadio myradio(PA_7,PA_6,PA_5,PB_13,D7,PC_6,PC_7,PC_8,PB_14,PB_15,PC_9,
-                            NC,NC,NC,NC,NC,NC,NC);
 
 
 /**
@@ -702,7 +692,7 @@ void NodeFlow::standby(int seconds, bool wkup_one, bool wkup_two) {
    if (seconds<1){
        seconds=1;
    } 
-   myradio.sleep();
+   //myradio.sleep();
    SystemPower_Config();
    core_util_critical_section_enter();
    clear_uc_wakeup_flags();
