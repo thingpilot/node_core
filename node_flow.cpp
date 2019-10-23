@@ -34,7 +34,7 @@ int status = 1;
  * @param frequency_hz The bus frequency in hertz
  */
 NodeFlow::NodeFlow(PinName write_control, PinName sda, PinName scl, int frequency_hz): 
- DataManager(write_control, sda, scl, frequency_hz) {
+ DataManager(write_control, sda, scl, frequency_hz), LorawanTP() {
 
  }
 
@@ -181,7 +181,15 @@ typedef enum {
     CUSTOM_U        =4
 }ValueType;
 
+int InitTTNKeys(uint8_t LORAWAN_DEV_EUI[],uint8_t LORAWAN_APP_EUI[],uint8_t LORAWAN_APP_KEY[]){
 
+
+LorawanTP::init("", "", "")
+
+return 0;
+
+
+}
 /** Start the device. kick the watchdog, initialise files, 
  *  Find the Wakeup type. 
  *  
@@ -687,8 +695,7 @@ int NodeFlow:: enter_standby(int intervals) {
 return 0;
 }
 void NodeFlow::standby(int seconds, bool wkup_one, bool wkup_two) { 
-   //ThisThread::sleep_for(1);
-   //seconds=seconds-1;
+   
    if (seconds<1){
        seconds=1;
    } 

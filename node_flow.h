@@ -19,7 +19,7 @@
 
     };
 
-class NodeFlow: public DataManager{ //, public TPL5010{
+class NodeFlow: public DataManager, public LorawanTP{ //, public TPL5010{
 
     public: 
     NodeFlow(PinName write_control, PinName sda, PinName scl, int frequency_hz);
@@ -34,6 +34,8 @@ class NodeFlow: public DataManager{ //, public TPL5010{
     int start(string device_id);
 
     int initialise(); 
+
+    int InitTTNKeys(uint8_t LORAWAN_DEV_EUI[],uint8_t LORAWAN_APP_EUI[],uint8_t LORAWAN_APP_KEY[]);
 
     /** Read global stats
      */
