@@ -9,11 +9,7 @@
   /** Includes
  */
 #include "node_flow.h"
-#include "SX1276_LoRaRadio.h"
-#include "lorawan/LoRaWANInterface.h"
-#include "mbed.h"
-#include "rtc_api_hal.h"
-#include <string>
+
 
 /** Use the SX1276 Lora radio pins
  *
@@ -214,6 +210,8 @@ int NodeFlow::start(string device_id){
  }
 
   if (wkp==WAKEUP_RESET) {
+    //set time here
+    set_time(1571753420);
     pc.printf("\r\n-------------------THING PILOT--------------------\r\n");;
     
     initialise();
@@ -577,7 +575,28 @@ RTC_DateTypeDef currentDate;
 time_t timestamp;
 struct tm currTime;
 
+void NodeFlow::SystemClock_Config(){
+ 
+//  HAL_Init();
+// //Initialise the calendar 
+// //Disable rtc registers write protection
+// RTC->WPR |= 0xCA;
+// RTC->WPR |= 0x53;
+// //enter initialization mode
+// RTC->ISR |= 1;
 
+// while(!(RTC->ISR & RTC_ISR_INITF))
+// {
+//  RTC->ISR |=RTC_ISR_INIT;
+
+// }
+// //nomize en lathos
+// RTC->PRER = 0x007f00ff; 
+
+// //load time and date values in the shadow reg
+// RTC->TR |=;
+
+}
 /* Code to get timestamp 
 *
 *  You must call HAL_RTC_GetDate() after HAL_RTC_GetTime() to unlock the values 
@@ -596,8 +615,11 @@ register*/
 // PWR->CR |= PWR_CR_DBP;
 // RCC->CSR |= (1 << 16);
 // RCC->CSR |= RCC_CSR_RTCEN;
-HAL_RTC_GetTime(&RtcHandle, &currentTime, RTC_FORMAT_BIN);
-HAL_RTC_GetDate(&RtcHandle, &currentDate, RTC_FORMAT_BIN);
+/* 
+HAL_RTCEx_GetTimeStamp (&RtcHandle, &currentTime, &currentDate,  RTC_FORMAT_BCD);
+
+// HAL_RTC_GetTime(&RtcHandle, &currentTime, RTC_FORMAT_BIN);
+// HAL_RTC_GetDate(&RtcHandle, &currentDate, RTC_FORMAT_BIN);
 
 currTime.tm_year = currentDate.Year + 100;  // In fact: 2000 + 18 - 1900
 currTime.tm_mday = currentDate.Date;
@@ -608,9 +630,17 @@ currTime.tm_min  = currentTime.Minutes;
 currTime.tm_sec  = currentTime.Seconds;
 
 timestamp = mktime(&currTime);
+//time_comparator=difftime(time_t time1, time_t time0); measure the difference
 
 pc.printf("Timestamp: %d",timestamp);
-//ThisThread::sleep_for(1);
+//ThisThread::sleep_for(1); 
+*/
+time_t seconds = time(NULL);
+        
+pc.printf("Time as seconds since January 1, 1970 = %d\n", seconds);
+        
+pc.printf("Time as a basic string = %s", ctime(&seconds));
+ThisThread::sleep_for(5);
 return timestamp;
 }
 
