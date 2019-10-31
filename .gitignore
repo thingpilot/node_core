@@ -2,3 +2,5 @@ BUILD
 .mbed
 thingpilot_semtech_lora
 mbed-semtech-lora-rf-drivers
+stm24256_eeprom_driver
+node_core_data_manager
