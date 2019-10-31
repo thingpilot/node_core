@@ -2,25 +2,17 @@
   * @file    NodeFlow.cpp
   * @version 0.1.0
   * @author  Rafaella Neofytou, Adam Mitchell
-  * @brief   C++ file of the NodeFlow. Provides a very lightweight filesystem to facilitate the
-  *          storage of arbitrary file types
+  * @brief   C++ file of the NodeFlow. 
+  *
   */
 
   /** Includes
  */
 #include "node_flow.h"
 
-
-/** Use the SX1276 Lora radio pins
- *
- */
-SX1276_LoRaRadio myradio(PA_7,PA_6,PA_5,PB_13,D7,PC_6,PC_7,PC_8,PB_14,PB_15,PC_9,
-                            NC,NC,NC,NC,NC,NC,NC);
-
-
 /**
  */
-Serial pc(PC_TXD, PC_RXD);
+Serial pc(PC_TXU, PC_RXU);
 
 /**Use the watchdog 
  */
@@ -32,31 +24,30 @@ int wkp=WAKEUP_UNKNOWN;
 int status = 1;
 
 /** Constructor. Create a NodeFlow interface, connected to the pins specified 
- *  operating at the specified frequency
- * 
- * @param write_control GPIO to enable or disable write functionality
- * @param sda I2C data line pin
- * @param scl I2C clock line pin
- * @param frequency_hz The bus frequency in hertz
- */
-NodeFlow::NodeFlow(PinName write_control, PinName sda, PinName scl, int frequency_hz): 
- DataManager(write_control, sda, scl, frequency_hz) {
+    *  operating at the specified frequency
+    * 
+    * @param write_control GPIO to enable or disable write functionality
+    * @param sda I2C data line pin
+    * @param scl I2C clock line pin
+    * @param frequency_hz The bus frequency in hertz
+    */
+ NodeFlow::NodeFlow(PinName write_control, PinName sda, PinName scl, int frequency_hz): 
+ DataManager(write_control, sda, scl, frequency_hz), LorawanTP() {
 
  }
 
 /** Destructor. 
- */
+    */
  NodeFlow::~NodeFlow() {
-
  }
 
 /** Eeprom configuration. 
- * @param DeviceConfig. Device specifics- send with the message payload.
- * @param SensorConfig. Each sensor is registered in the Sensor config file.
- * @param SensorA..SensorD. Each sensor will be able to store a specific amount of values (to be specified).
- * @param BatteryVoltage
- *
- */
+    * @param DeviceConfig. Device specifics- send with the message payload.
+    * @param SensorConfig. Each sensor is registered in the Sensor config file.
+    * @param SensorA..SensorD. Each sensor will be able to store a specific amount of values (to be specified).
+    * @param BatteryVoltage
+    *
+    */
     union DeviceConfig
 {
     struct 
@@ -115,17 +106,18 @@ union BatteryVoltage
         uint16_t device_type;
         int timestamp;
 
-
     } parameters;
 
     char data[sizeof(BatteryVoltage::parameters)];
 };
+
+/** Holds ONLY the next sleeping time (time difference)
+ */
 union TimeConfig
 {
     struct 
     {
         uint16_t time_comparator;
-
         
     } parameters;
 
@@ -209,14 +201,13 @@ int NodeFlow::start(string device_id){
     return wkp; 
  }
 
-  if (wkp==WAKEUP_RESET) {
-    //set time here
-    set_time(1571753420);
+    set_time(0);
     pc.printf("\r\n-------------------THING PILOT--------------------\r\n");;
-    
     initialise();
     pc.printf("\r\nWelcome!\r\nYour device id: %s\r\n",device_id.c_str());
     status=add_time_config_file();
+    /** Time comparator to zero
+     */
     TimeConfig t_conf;
     t_conf.parameters.time_comparator=0;
     status= DataManager::overwrite_file_entries(TimeConfig_n, t_conf.data, sizeof(t_conf.parameters));
@@ -244,33 +235,24 @@ int NodeFlow::start(string device_id){
 }
 
 
-
-bool NodeFlow::isReadingTime(int device_id){
-
-
-return true;
-}
-
 /** Initialise the eeprom
- * @return Status
- */
+    * @return Status
+    */
 int NodeFlow::initialise(){
-    
+    set_time(0);
     pc.printf("\r\n------------------INITIALISATION------------------\r\n");
     status=DataManager::init_filesystem();
     bool initialised = false;
     status=DataManager::is_initialised(initialised);
 
     if(status!=0){
-    pc.printf("Filesystem initialisation failed. status: %i, is initialised: %i\r\n", status, initialised);  
- }
+    pc.printf("Filesystem initialisation failed. status: %i, is initialised: %i\r\n", status, initialised); }
 
- //get_global_stats();
 return status;
 }
 /** Get global stats
- * @return Status
- */
+    * @return Status
+    */
 int NodeFlow::get_global_stats() {
     DataManager_FileSystem::GlobalStats_t g_stats;
     status = DataManager::get_global_stats(g_stats.data);
@@ -279,9 +261,16 @@ int NodeFlow::get_global_stats() {
  return status;
 }
 
+
+bool NodeFlow::isReadingTime(int device_id){
+
+
+return true;
+}
+
 /** Initialise the time config file
- * @return Status
- */
+    * @return Status
+    */
 int NodeFlow::add_time_config_file(){
     
     DataManager_FileSystem::File_t TimeConfig_File_t;
@@ -290,11 +279,9 @@ int NodeFlow::add_time_config_file(){
     status=DataManager::add_file(TimeConfig_File_t, 1);
 
     if (status!=0){
-        pc.printf("Time Config failed: %i\r\n", status);
-        
+        pc.printf("Time Config failed: %i\r\n", status);  
     }
     return status;
-
 }
 
 
@@ -305,7 +292,6 @@ int NodeFlow::add_data_config_file(uint16_t entries_to_store,uint16_t device_id,
     // DeviceConfig_File_t.parameters.filename = DeviceConfig_n;
     // DeviceConfig_File_t.parameters.length_bytes = sizeof(DeviceConfig::parameters);
 
-    
     //  if(DataManager::add_file(DeviceConfig_File_t, entries_to_store)!=0){
         
     //      pc.printf("Unsuccess! status: %i\r\n", status);
@@ -361,80 +347,67 @@ return status;
  int NodeFlow::add_sensors( uint8_t device_id[],uint8_t device_type[],uint16_t reading_time[],
                              size_t number_of_sensors) {
   
-  
   if (wkp==WAKEUP_RESET) {
   pc.printf("\r\n-------------------ADD SENSORS--------------------\r\n");
-   // get_global_stats();
+
     if (number_of_sensors>7){
         status=-1; //change 
         pc.printf("Error more than 7 sensors. Status %d \r\n", status);   
-        
+        return status;
     }
-
     else {
-        
+    /** Files Initialisation
+     */    
     DataManager_FileSystem::File_t SensorConfig_File_t;
     SensorConfig_File_t.parameters.filename = SensorConfig_n;
     SensorConfig_File_t.parameters.length_bytes = sizeof(SensorConfig::parameters);
     status=DataManager::add_file(SensorConfig_File_t, number_of_sensors);
-     if (status!=0){
-        pc.printf("Add file failed: %i\r\n", status);
-        return status;
-    }
-
-    //at initialisation
+        if (status!=0){
+            pc.printf("Add file failed: %i\r\n", status);
+            return status; }
+    
     DataManager_FileSystem::File_t TempSensorConfig_File_t;
     TempSensorConfig_File_t.parameters.filename = TempSensorConfig_n;
     TempSensorConfig_File_t.parameters.length_bytes = sizeof(TempSensorConfig::parameters);
     status = DataManager::add_file(TempSensorConfig_File_t, number_of_sensors);
-   
         if(status!=0){
              pc.printf("Add file failed: %i\r\n", status);
-            }
-
-        else{
-                   
-            for (int i=0; i<number_of_sensors; i++){
-                SensorConfig s_conf;
-                //s_conf.parameters.device_id=i;
-                s_conf.parameters.device_id = device_id[i];
-                s_conf.parameters.device_type =device_type[i];
-                s_conf.parameters.time_comparator=reading_time[i];
-               
-                status=DataManager::append_file_entry(SensorConfig_n, s_conf.data, sizeof(s_conf.parameters));
-                if(status!=0){
-                    pc.printf("Add file failed: %i\r\n", status);
-                }
-
-                //temporary reading times
-                TempSensorConfig ts_conf;
-                ts_conf.parameters.device_id = device_id[i];
-                ts_conf.parameters.time_comparator=reading_time[i];
+             return status;}
         
-                status = DataManager::append_file_entry(TempSensorConfig_n, ts_conf.data, sizeof(ts_conf.parameters));
-                if(status!=0){
-                    pc.printf("Error append_file_entries No: %i status: %i\r\n", i, status);
-                
-                }
-                else{
-            
-                status = DataManager::read_file_entry(TempSensorConfig_n, i, ts_conf.data, sizeof(ts_conf.parameters));
-                if(status!=0){
-                    pc.printf("Read file failed: %i\r\n", status);
-                }
-                pc.printf("%d. Sensor device id: %i, wake up every: %u Seconds\r\n",i, ts_conf.parameters.device_id,ts_conf.parameters.time_comparator);
+        for (int i=0; i<number_of_sensors; i++){
+             SensorConfig s_conf;
+             s_conf.parameters.device_id = device_id[i];
+             s_conf.parameters.device_type =device_type[i];
+             s_conf.parameters.time_comparator=reading_time[i];
                
-                }
+             status=DataManager::append_file_entry(SensorConfig_n, s_conf.data, sizeof(s_conf.parameters));
+             if(status!=0){
+                pc.printf("Add file failed: %i\r\n", status);
+                return status;}
+
+            //temporary reading times
+             TempSensorConfig ts_conf;
+             ts_conf.parameters.device_id = device_id[i];
+             ts_conf.parameters.time_comparator=reading_time[i];
+        
+             status = DataManager::append_file_entry(TempSensorConfig_n, ts_conf.data, sizeof(ts_conf.parameters));
+             if(status!=0){
+                 pc.printf("Error append_file_entries No: %i status: %i\r\n", i, status);
+                 return status;}
+             
+             status = DataManager::read_file_entry(TempSensorConfig_n, i, ts_conf.data, sizeof(ts_conf.parameters));
+             if(status!=0){
+                 pc.printf("Read file failed: %i\r\n", status);
+                 return status;}
+             pc.printf("%d. Sensor device id: %i, wake up every: %u Seconds\r\n",i, ts_conf.parameters.device_id,ts_conf.parameters.time_comparator);
+                  
             }
-        }
      }
-    
     pc.printf("--------------------------------------------------\r\n");
    
     return status;
   }
 
-   //  get_global_stats();
     return 0; 
 }
 
@@ -462,14 +435,14 @@ int NodeFlow::set_reading_time(uint16_t arr[], int n){
     status = DataManager::add_file(TempConfig_File_t, n);
     if (status!=0){
             pc.printf("Add file error. status: %i\r\n", status);
-            return 2;
+            return status;
          }
  }
  pc.printf("\r\nTime comparator equals %d (should be zero at first)\r\n",time_comparator);
  status=DataManager::read_file_entry(TempSensorConfig_n, 0, ts_conf.data, sizeof(ts_conf.parameters));
  if (status!=0){
      pc.printf("Error read_file_entry Temporary Config. status: %i\r\n", status);
-     return 2;
+     return status;
  }
  int temp=ts_conf.parameters.time_comparator; //time_left for first sensor
  //pc.printf("\r\nTemp equals %d\r\n",temp);
@@ -480,7 +453,7 @@ int NodeFlow::set_reading_time(uint16_t arr[], int n){
         status=DataManager::read_file_entry(TempSensorConfig_n, i, ts_conf.data, sizeof(ts_conf.parameters));
         if (status!=0){
             pc.printf("Error read_file_entry Temporary Config. status: %i\r\n", status);
-            return 2;
+            return status;
          }
         int dev_id=ts_conf.parameters.device_id;
         int time_comparator_now= ts_conf.parameters.time_comparator;//(temp1);//-time_comparator;
@@ -497,18 +470,15 @@ int NodeFlow::set_reading_time(uint16_t arr[], int n){
     status=DataManager::overwrite_file_entries(TimeConfig_n, t_conf.data, sizeof(t_conf.parameters));
      if (status!=0){
             pc.printf("Error overwrite time config. status: %i\r\n", status);
-            return 2;
+            return status;
          }
-   // pc.printf("Overwrite status: %i\r\n", status);
-    
-
-   
+     
     for (int i=0; i<n; i++){
 
         status=DataManager::read_file_entry(TempSensorConfig_n, i, ts_conf.data, sizeof(ts_conf.parameters));
         if (status!=0){
             pc.printf("Error read temporary time sensor config. status: %i\r\n", status);
-            return 2;
+            return status;
          }
         
         int dev_id=ts_conf.parameters.device_id;
@@ -520,7 +490,7 @@ int NodeFlow::set_reading_time(uint16_t arr[], int n){
             status=DataManager::read_file_entry(SensorConfig_n, i, s_conf.data, sizeof(s_conf.parameters));
             if (status!=0){
             pc.printf("Error read sensor config. status: %i\r\n", status);
-            return 2;
+            return status;
              }
             tm_conf.parameters.time_comparator=s_conf.parameters.time_comparator;
 
@@ -535,14 +505,14 @@ int NodeFlow::set_reading_time(uint16_t arr[], int n){
         }
         if (status!=0){
             pc.printf("Error Temp config. status: %i\r\n", status);
-            return 2;
+            return status;
              }
     }
     for (int i=0; i<n; i++){
     status=DataManager::read_file_entry(TempConfig_n, i, tm_conf.data, sizeof(tm_conf.parameters));
     if (status!=0){
             pc.printf("Error read temp config. status: %i\r\n", status);
-            return 2;
+            return status;
              }
     pc.printf("%d. Sensor device id: %i, next reading: %u seconds\r\n",i, tm_conf.parameters.device_id,tm_conf.parameters.time_comparator);
    
@@ -558,7 +528,7 @@ int NodeFlow::set_reading_time(uint16_t arr[], int n){
     }
     if (status!=0){
             pc.printf("Error write temp sensor config. status: %i\r\n", status);
-            return 2;
+            return status;
              }
     }
 
@@ -569,81 +539,98 @@ int NodeFlow::set_reading_time(uint16_t arr[], int n){
 }
 
 RTC_HandleTypeDef RtcHandle;
-RTC_TimeTypeDef currentTime;
-RTC_DateTypeDef currentDate;
 
-time_t timestamp;
-struct tm currTime;
+// RTC_TimeTypeDef currentTime;
+// RTC_DateTypeDef currentDate;
 
-void NodeFlow::SystemClock_Config(){
- 
-//  HAL_Init();
-// //Initialise the calendar 
-// //Disable rtc registers write protection
-// RTC->WPR |= 0xCA;
-// RTC->WPR |= 0x53;
-// //enter initialization mode
-// RTC->ISR |= 1;
+// time_t timestamp;
 
-// while(!(RTC->ISR & RTC_ISR_INITF))
-// {
-//  RTC->ISR |=RTC_ISR_INIT;
 
-// }
-// //nomize en lathos
-// RTC->PRER = 0x007f00ff; 
+/** Timestamp. Send ClockSync message, wait for a response from ttn if it fails don't change the time
+    * @param num_timestamp_retries  The number of retries to get the Timestamp
+    * 
 
-// //load time and date values in the shadow reg
-// RTC->TR |=;
+ */
+uint16_t NodeFlow::get_timestamp(){
+    pc.printf("Horrayy,setting the time, bare with me\r\n");
+    int64_t timestamp=0;
+    uint8_t dummy[1]={0};
+    uint8_t port= 223;
+    uint8_t retcode=LorawanTP::send_message(port, dummy, sizeof(dummy));
+    if(retcode<0){
+        pc.printf("Failed to send\r\n");
+    }
+    LorawanTP::receive_message();
+    //ThisThread::sleep_for(10000);
 
-}
-/* Code to get timestamp 
-*
-*  You must call HAL_RTC_GetDate() after HAL_RTC_GetTime() to unlock the values 
-*  in the higher-order calendar shadow registers to ensure consistency between the time and date values.
-*  Reading RTC current time locks the values in calendar shadow registers until Current date is read
-*  to ensure consistency between the time and date values.
-*/
-int NodeFlow::get_timestamp(){
+    for(int i=0; (timestamp<=0) && (i<3); i++) {
+    ThisThread::sleep_for(10000);
+    retcode=LorawanTP::send_message(5, dummy, 1);
+    if(retcode<0){
+    pc.printf("Failed to send\r\n");
+    }
+    pc.printf("Waiting for a response dude\r\n");
+    timestamp=LorawanTP::receive_message();
 
-// HAL_RTCEx_GetTimeStamp(&RtcHandle,&currentTime,&currentDate,RTC_FORMAT_BIN);
-
-/* Enable the power interface clock by setting the PWREN bits in the RCC_APB1ENR
-register*/    
-// RCC->APB1ENR |= RCC_APB1ENR_PWREN;
-
-// PWR->CR |= PWR_CR_DBP;
-// RCC->CSR |= (1 << 16);
-// RCC->CSR |= RCC_CSR_RTCEN;
-/* 
-HAL_RTCEx_GetTimeStamp (&RtcHandle, &currentTime, &currentDate,  RTC_FORMAT_BCD);
-
-// HAL_RTC_GetTime(&RtcHandle, &currentTime, RTC_FORMAT_BIN);
-// HAL_RTC_GetDate(&RtcHandle, &currentDate, RTC_FORMAT_BIN);
-
-currTime.tm_year = currentDate.Year + 100;  // In fact: 2000 + 18 - 1900
-currTime.tm_mday = currentDate.Date;
-currTime.tm_mon  = currentDate.Month- 1;
-
-currTime.tm_hour = currentTime.Hours;
-currTime.tm_min  = currentTime.Minutes;
-currTime.tm_sec  = currentTime.Seconds;
-
-timestamp = mktime(&currTime);
-//time_comparator=difftime(time_t time1, time_t time0); measure the difference
-
-pc.printf("Timestamp: %d",timestamp);
-//ThisThread::sleep_for(1); 
-*/
-time_t seconds = time(NULL);
-        
-pc.printf("Time as seconds since January 1, 1970 = %d\n", seconds);
-        
-pc.printf("Time as a basic string = %s", ctime(&seconds));
-ThisThread::sleep_for(5);
-return timestamp;
+    if (timestamp<0){
+        pc.printf("No Uplink\r\n");
+        }
+    else{
+        pc.printf("Rx decimal value %llu\r\n", timestamp);
+       //timestamp = mktime(&currTime);
+       //time_comparator=difftime(time_t time1, time_t time0); measure the difference
+        set_time(timestamp);
+        return timestamp;
+    }
+    }
+    return timestamp;
 }
 
+
+
+
+/**LorawanTP
+ */
+int NodeFlow::joinTTN(){
+    
+    int retcode=LorawanTP::join();
+    if(retcode<0){
+        pc.printf("Failed to join\r\n");
+        return retcode;
+        }
+    if(wkp==WAKEUP_RESET){
+        NodeFlow::get_timestamp();
+        time_t seconds = time(NULL);
+        pc.printf("Time as seconds since January 1, 1970 = %u UTC.\r\n",seconds);
+        return seconds;
+            }
+    
+
+    return retcode;
+}
+int NodeFlow::sendTTN(uint8_t port, uint8_t *payload, uint16_t length){
+    if (wkp==WAKEUP_RESET){
+        pc.printf("Dont Send anything because its the first time you are awake\r\n");
+        return 0;
+    }
+    else{
+        pc.printf("---------------------SENDING----------------------\r\n");
+        int retcode=LorawanTP::send_message(port, payload, length);
+        if (retcode<0){
+            pc.printf("\r\nError Sending %d bytes\r\n", retcode);
+        }
+        else{
+        pc.printf("\r\nSending %d bytes \r\n", retcode);
+        time_t seconds = time(NULL);
+        pc.printf("Time as seconds since January 1, 1970 = %u\r\n",seconds);
+    }
+    pc.printf("--------------------------------------------------\r\n");
+    
+    return retcode;
+    }
+}
+/**Standby
+ */
 void NodeFlow::_init_rtc() {
    PlatformMutex *mtx = new PlatformMutex;
    mtx->lock();
@@ -723,16 +710,12 @@ int NodeFlow::get_wakeup_type(){
 }
 
 
-int NodeFlow:: enter_standby(int intervals) {
-return 0;
-}
 void NodeFlow::standby(int seconds, bool wkup_one, bool wkup_two) { 
-   //ThisThread::sleep_for(1);
-   //seconds=seconds-1;
+ 
    if (seconds<1){
-       seconds=1;
+       seconds=10;
    } 
-   myradio.sleep();
+   LorawanTP::sleep();
    SystemPower_Config();
    core_util_critical_section_enter();
    clear_uc_wakeup_flags();

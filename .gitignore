@@ -1,5 +1,6 @@
 BUILD
 .mbed
+thingpilot_semtech_lora
+mbed-semtech-lora-rf-drivers
 node_core_data_manager
 stm24256_eeprom_driver
-tpl5010_watchdog_driver
