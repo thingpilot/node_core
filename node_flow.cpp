@@ -200,7 +200,7 @@ int NodeFlow::start(string device_id){
     pc.printf("\r\n-------------------TIMER WAKEUP-------------------\r\n");
     return wkp; 
  }
-
+if (wkp==WAKEUP_RESET) {
     set_time(0);
     pc.printf("\r\n-------------------THING PILOT--------------------\r\n");;
     initialise();
@@ -711,11 +711,15 @@ int NodeFlow::get_wakeup_type(){
 
 
 void NodeFlow::standby(int seconds, bool wkup_one, bool wkup_two) { 
- 
+   pc.printf("Going to sleep for %d!",seconds);
    if (seconds<1){
        seconds=10;
    } 
-   LorawanTP::sleep();
+   int retcode=LorawanTP::sleep();
+   if(retcode!=LORAWAN_STATUS_DEVICE_OFF){
+       pc.printf("Lora not on sleep?!");     
+    }
+   ThisThread::sleep_for(100);
    SystemPower_Config();
    core_util_critical_section_enter();
    clear_uc_wakeup_flags();
