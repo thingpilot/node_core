@@ -5,29 +5,27 @@
 #include "TPL5010.h"
 #include "LorawanTP.h"
 #include <string>
-
+#include "rtos.h"
 
   /** Get wakeup type
      */ 
     enum WakeupType {
-    WAKEUP_RESET    ,
-    WAKEUP_TIMER    ,
-    WAKEUP_PIN      ,
-    WAKEUP_SOFTWARE ,
-    WAKEUP_LOWPOWER ,
-    WAKEUP_UNKNOWN  
-
+                        WAKEUP_RESET    ,
+                        WAKEUP_TIMER    ,
+                        WAKEUP_PIN      ,
+                        WAKEUP_SOFTWARE ,
+                        WAKEUP_LOWPOWER ,
+                        WAKEUP_UNKNOWN  
     };
 
 class NodeFlow: public DataManager, public LorawanTP{ //, public TPL5010{
 
     public: 
+
+
     NodeFlow(PinName write_control, PinName sda, PinName scl, int frequency_hz);
 
-    
-
     ~NodeFlow();
-
 
     /** Check to see if filesystem is initialised
      */
@@ -35,8 +33,11 @@ class NodeFlow: public DataManager, public LorawanTP{ //, public TPL5010{
 
     int initialise(); 
 
-    int InitTTNKeys(uint8_t LORAWAN_DEV_EUI[],uint8_t LORAWAN_APP_EUI[],uint8_t LORAWAN_APP_KEY[]);
-
+    
+    int joinTTN();
+   
+    int sendTTN(uint8_t port, uint8_t payload[], uint16_t length);
+    
     /** Read global stats
      */
     int get_global_stats();
@@ -57,10 +58,9 @@ class NodeFlow: public DataManager, public LorawanTP{ //, public TPL5010{
      *  ex. enter_standby(periodic_intervals, interrupt_sleep_time);
      */
     
-     int enter_standby(int intervals=NULL);
+     
      void standby(int seconds, bool wkup_one, bool wkup_two);
     
-
      int set_reading_time(uint16_t arr[],int n);
 
      bool isReadingTime(int device_id);
@@ -75,7 +75,7 @@ class NodeFlow: public DataManager, public LorawanTP{ //, public TPL5010{
     static void rtc_set_wake_up_timer_s(uint32_t delta);
     void clear_uc_wakeup_flags();
     static int get_wakeup_type();
-    int get_timestamp();
+    uint16_t get_timestamp();
     /**
      
      */
@@ -96,31 +96,3 @@ class NodeFlow: public DataManager, public LorawanTP{ //, public TPL5010{
     
 };
 
-// class Sensor: public I2C
-
-// {
-// public:
-//  /*Status*/
-//     typedef int Sensor_Status_t;
-
-//         enum 
-//         {
-//             SENSOR_OK                            = 0, /**< enum value 1 */
-//             SENSOR_READ_FAIL                     = 1,
-//             SENSOR_WRITE_FAIL                    = 2,
-//             SENSOR_VERIFY_FAIL                   = 3,
-//             SENSOR_CHIP_ERROR                    = -255
-//         };
-// Sensor(int device_id);
-// //~Sensor(int device_id);
-
-// virtual int ReadSignature();
-// virtual float ReadValue()=0;
-// virtual unsigned long ReadDeviceId();
-
-// uint16_t read2Bytes(int chip_addr, int offset);
-
-// private: 
-// virtual bool isReadingTime()=0; //derived class defines if is reading time
-
-// };
