@@ -14,17 +14,23 @@
 #include "DataManager.h"
 #include "rtc_api_hal.h"
 #include "TPL5010.h"
-#include "LorawanTP.h"
 #include <string>
 #include "rtos.h"
 #include <cmath>
 #include "config_device.h"
-
+#include "LorawanTP.h"
+ 
 //#include "board.h"
 #define size(x)  (sizeof(x) / sizeof((x)[0]))
-#define DEVELOPMENT_BOARD_V1_1_0    0    
-#define WRIGHT_V1_0_0               1
-#define EARHART_V1_0_0              2
+#define DIVIDE(x) (x)/2
+// #define DEVELOPMENT_BOARD_V1_1_0    0    
+// #define WRIGHT_V1_0_0               1
+// #define EARHART_V1_0_0              2
+
+/**Time related defines */
+#define DAYINSEC                    86400
+#define HOURINSEC                   3600
+#define MINUTEINSEC                 60
 
 /** WakeupType enum, possible ways to wake up from sleep.
  */
@@ -42,6 +48,7 @@ enum Flags {
                     FLAG_SENSING,
                     FLAG_CLOCK_SYNCH,
                     FLAG_SENDING,
+                    FLAG_WAKEUP_PIN,
                     FLAG_UNKNOWN            
 };
 
@@ -60,13 +67,14 @@ public:
      * @param scl I2C clock line pin
      * @param frequency_hz The bus frequency in hertz. */
     NodeFlow(PinName write_control=TP_EEPROM_WC, PinName sda=TP_I2C_SDA, PinName scl=TP_I2C_SCL, int frequency_hz=TP_I2C_FREQ);
-
+    
     ~NodeFlow();
 
     virtual int setup()=0;
     virtual int HandleInterrupt()=0;
+    
     virtual uint8_t* HandlePeriodic(uint16_t &length)=0; //uint8_t payload[], uint16_t &length
-
+    //virtual uint8_t* HandlePeriodicGroup1(uint16_t &length)=0;
 
     int getPlatform();
     int HandleModem();
@@ -82,8 +90,7 @@ public:
      *  
      *
      */
-    int add_sensors(uint8_t device_sn[],uint16_t reading_time[],
-                    size_t number_of_sensors);
+    int add_sensors(); //uint8_t device_sn[],uint16_t reading_time[],size_t number_of_sensors
     
     /**Sets the device in standby mode.
      *  
@@ -105,7 +112,7 @@ public:
     *                                       i) The sleeping time until next reading sensors measurement.
     *                                       ii) Watchdog wakeup if the time until next reading is more than two hours
     */        
-    int set_reading_time(uint16_t arr[],size_t n);
+    int set_reading_time(); //uint16_t arr[],size_t n
    
    /** Scheduler for reading sensors
     *
@@ -167,6 +174,8 @@ public:
     uint8_t get_timestamp();
     uint32_t time_now();
     uint8_t timetodate(uint32_t remainder_time);
+
+
     
     /**EEPROM
      */
@@ -190,7 +199,8 @@ public:
 
     //int sched_config_init(int length);
     //int set_sched_config(int time_comparator);
-    int overwrite_sched_config(int time_comparator,int i);
+    int overwrite_sched_config(uint16_t code,uint16_t length);
+    int append_sched_config(uint16_t time_comparator);
     int overwrite_clock_synch_config(int time_comparator, bool clockSynchOn);
     uint16_t read_sched_config(int i);
     uint16_t read_clock_synch_config(bool &clockSynchOn);
@@ -205,9 +215,14 @@ public:
     int set_flags_config(bool kick_wdg, bool sense_time, bool clock_synch);
 
     int get_flags();
+    int delay_pin_wakeup();
+    int set_wakeup_pin_flag(bool wakeup_pin);
     int increment(int i);
     int read_increment();
-    
+
+    /**Handle Interrupt */
+    uint16_t get_interrupt_latency();
+    int ovewrite_wakeup_timestamp(uint16_t time_remainder);
 };
 
 
