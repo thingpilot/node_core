@@ -233,7 +233,7 @@ enum Filenames
 int NodeFlow::initialise_nbiot()
 {
     int status = _radio.start();
-    if(status != NodeFlow::NODELOW_OK)
+    if(status != NodeFlow::NODEFLOW_OK)
     {
         return status;
     }
