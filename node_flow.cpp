@@ -213,6 +213,11 @@ enum Filenames
     NextTimeConfig_n        = 10
  };
 
+ int NodeFlow::initialise_nbiot()
+ {
+     
+ }
+
 /** Start the device. kick the watchdog, initialise files, 
  *  Find the Wakeup type. 
  *  

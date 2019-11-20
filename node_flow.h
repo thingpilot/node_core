@@ -80,6 +80,8 @@ public:
     virtual uint8_t* HandlePeriodic(uint16_t &length)=0; //uint8_t payload[], uint16_t &length
     //virtual uint8_t* HandlePeriodicGroup1(uint16_t &length)=0;
 
+    int initialise_nbiot();
+
     int getPlatform();
     int HandleModem();
     /** Initialise device.
