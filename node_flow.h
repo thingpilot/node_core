@@ -88,7 +88,9 @@ public:
      * @param scl I2C clock line pin
      * @param frequency_hz The bus frequency in hertz. 
      */
+    #if BOARD == EARHART_V1_0_0
     NodeFlow(PinName write_control=TP_EEPROM_WC, PinName sda=TP_I2C_SDA, PinName scl=TP_I2C_SCL, int frequency_hz=TP_I2C_FREQ);
+    #endif /* #if BOARD == EARHART_V1_0_0 */
 
     #if BOARD == WRIGHT_V1_0_0
     NodeFlow(PinName write_control=TP_EEPROM_WC, PinName sda=TP_I2C_SDA, PinName scl=TP_I2C_SCL, int frequency_hz=TP_I2C_FREQ,

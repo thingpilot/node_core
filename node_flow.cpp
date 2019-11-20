@@ -35,10 +35,11 @@ int status = 1;
  * @param sda I2C data line pin
  * @param scl I2C clock line pin
  * @param frequency_hz The bus frequency in hertz. */
-
- NodeFlow::NodeFlow(PinName write_control, PinName sda, PinName scl, int frequency_hz): 
- DataManager(write_control, sda, scl, frequency_hz) {
- }
+#if BOARD == EARHART_V1_0_0
+NodeFlow::NodeFlow(PinName write_control, PinName sda, PinName scl, int frequency_hz): 
+DataManager(write_control, sda, scl, frequency_hz) {
+}
+#endif /* #if BOARD == EARHART_V1_0_0 */
 
 #if BOARD == WRIGHT_V1_0_0
 NodeFlow(PinName write_control=TP_EEPROM_WC, PinName sda=TP_I2C_SDA, PinName scl=TP_I2C_SCL, int frequency_hz=TP_I2C_FREQ,
