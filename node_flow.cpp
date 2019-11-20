@@ -42,14 +42,14 @@ DataManager(write_control, sda, scl, frequency_hz) {
 #endif /* #if BOARD == EARHART_V1_0_0 */
 
 #if BOARD == WRIGHT_V1_0_0
-NodeFlow(PinName write_control=TP_EEPROM_WC, PinName sda=TP_I2C_SDA, PinName scl=TP_I2C_SCL, int frequency_hz=TP_I2C_FREQ,
-         PinName txu=TP_NBIOT_TXU, PinName rxu=TP_NBIOT_RXU, PinName cts=TP_NBIOT_CTS, PinName rst=TP_NBIOT_RST, 
-         PinName vint=TP_NBIOT_VINT, PinName gpio=TP_NBIOT_GPIO, int baud=TP_NBIOT_BAUD, PinName done=TP_DONE) :
-         DataManger(write_control, sda, scl, frequency_hz), _radio(txu, rxu, cts, rst, vint, gpio, baud)
+NodeFlow::NodeFlow(PinName write_control, PinName sda, PinName scl, int frequency_hz,
+                   PinName txu, PinName rxu, PinName cts, PinName rst, 
+                   PinName vint, PinName gpio, int baud, PinName done) :
+                   DataManager(write_control, sda, scl, frequency_hz), _radio(txu, rxu, cts, rst, vint, gpio, baud)
 {
 
 }
-#endif /* #if BOARD == WRIGHT_V1_0_0
+#endif /* #if BOARD == WRIGHT_V1_0_0 */
 
 /** Destructor. 
  */
