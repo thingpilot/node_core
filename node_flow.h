@@ -22,6 +22,7 @@
     #include "LorawanTP.h"
 #elif BOARD == WRIGHT_V1_0_0
     #pragma message "TARGET = WRIGHT"
+    #include "tp_nbiot_interface.h"
 #else
     #pragma message "TARGET UNKNOWN"
 #endif
