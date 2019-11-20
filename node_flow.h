@@ -65,6 +65,7 @@ class NodeFlow: public DataManager{ //, public LorawanTP
 public:
 
     /** Enumerated list of NodeFlow error codes
+     */
     enum 
     {
         NODEFLOW_OK = 0
