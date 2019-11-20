@@ -223,10 +223,22 @@ enum Filenames
     NextTimeConfig_n        = 10
  };
 
- int NodeFlow::initialise_nbiot()
- {
-     
- }
+/** Attempt to connect to NB-IoT network with default parameters
+ *  described in tp_nbiot_interface.h. The function blocks and will
+ *  time out after 5 minutes at which point the NB-IoT modem will 
+ *  regress to minimum functionality in order to conserve power whilst
+ *  the application decides what to do
+ */
+int NodeFlow::initialise_nbiot()
+{
+    int status = _radio.start();
+    if(status != NodeFlow::NODELOW_OK)
+    {
+        return status;
+    }
+
+    return NodeFlow::NODEFLOW_OK;
+}
 
 /** Start the device. kick the watchdog, initialise files, 
  *  Find the Wakeup type. 
