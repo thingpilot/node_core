@@ -64,6 +64,12 @@ class NodeFlow: public DataManager{ //, public LorawanTP
 
 public:
 
+    /** Enumerated list of NodeFlow error codes
+    enum 
+    {
+        NODEFLOW_OK = 0
+    };
+
     /** Enumerated list of possible comms radio stacks
      */
     enum class Comms_Radio_Stack
