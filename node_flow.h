@@ -236,12 +236,16 @@ class NodeFlow: public DataManager
     /**Handle Interrupt */
     uint16_t get_interrupt_latency();
     int ovewrite_wakeup_timestamp(uint16_t time_remainder);
-
     #if BOARD == WRIGHT_V1_0_0
         TP_NBIoT_Interface _radio;
+        Comms_Radio_Stack _comms_stack = Comms_Radio_Stack::NBIOT;
+        TP_NBIoT_Interface _radio;
     #elif BOARD == EARHART_V1_0_0
-        // Add LoRa object for _radio
-    #endif /* #if BOARD == ...
+        Comms_Radio_Stack _comms_stack = Comms_Radio_Stack::LORA;
+    #else 
+        Comms_Radio_Stack _comms_stack = Comms_Radio_Stack::UNDEFINED;
+    #endif /* #if BOARD == ... */
+
 };
 
 
