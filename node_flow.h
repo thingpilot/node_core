@@ -85,14 +85,15 @@ public:
      * @param write_control GPIO to enable or disable write functionality
      * @param sda I2C data line pin
      * @param scl I2C clock line pin
-     * @param frequency_hz The bus frequency in hertz. */
+     * @param frequency_hz The bus frequency in hertz. 
+     */
     NodeFlow(PinName write_control=TP_EEPROM_WC, PinName sda=TP_I2C_SDA, PinName scl=TP_I2C_SCL, int frequency_hz=TP_I2C_FREQ);
 
     #if BOARD == WRIGHT_V1_0_0
     NodeFlow(PinName write_control=TP_EEPROM_WC, PinName sda=TP_I2C_SDA, PinName scl=TP_I2C_SCL, int frequency_hz=TP_I2C_FREQ
              PinName txu=TP_NBIOT_TXU, PinName rxu=TP_NBIOT_RXU, PinName cts=TP_NBIOT_CTS, PinName rst=TP_NBIOT_RST, 
              PinName vint=TP_NBIOT_VINT, PinName gpio=TP_NBIOT_GPIO, int baud=TP_NBIOT_BAUD, PinName done=TP_DONE);
-    #endif /* #if BOARD == WRIGHT_V1_0_0
+    #endif /* #if BOARD == WRIGHT_V1_0_0 */
 
     ~NodeFlow();
 
@@ -101,6 +102,12 @@ public:
     virtual uint8_t* HandlePeriodic(uint16_t &length)=0; //uint8_t payload[], uint16_t &length
     //virtual uint8_t* HandlePeriodicGroup1(uint16_t &length)=0;
 
+    /** Attempt to connect to NB-IoT network with default parameters
+     *  described in tp_nbiot_interface.h. The function blocks and will
+     *  time out after 5 minutes at which point the NB-IoT modem will 
+     *  regress to minimum functionality in order to conserve power whilst
+     *  the application decides what to do
+     */
     int initialise_nbiot();
 
     int getPlatform();
