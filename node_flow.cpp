@@ -44,7 +44,7 @@ int status = 1;
 NodeFlow(PinName write_control=TP_EEPROM_WC, PinName sda=TP_I2C_SDA, PinName scl=TP_I2C_SCL, int frequency_hz=TP_I2C_FREQ
          PinName txu=TP_NBIOT_TXU, PinName rxu=TP_NBIOT_RXU, PinName cts=TP_NBIOT_CTS, PinName rst=TP_NBIOT_RST, 
          PinName vint=TP_NBIOT_VINT, PinName gpio=TP_NBIOT_GPIO, int baud=TP_NBIOT_BAUD, PinName done=TP_DONE) :
-         _radio(txu, rxu, cts, rst, vint, gpio, baud)
+         DataManger(write_control, sda, scl, frequency_hz), _radio(txu, rxu, cts, rst, vint, gpio, baud)
 {
 
 }
@@ -223,10 +223,22 @@ enum Filenames
     NextTimeConfig_n        = 10
  };
 
- int NodeFlow::initialise_nbiot()
- {
-     
- }
+/** Attempt to connect to NB-IoT network with default parameters
+ *  described in tp_nbiot_interface.h. The function blocks and will
+ *  time out after 5 minutes at which point the NB-IoT modem will 
+ *  regress to minimum functionality in order to conserve power whilst
+ *  the application decides what to do
+ */
+int NodeFlow::initialise_nbiot()
+{
+    int status = _radio.start();
+    if(status != NodeFlow::NODELOW_OK)
+    {
+        return status;
+    }
+
+    return NodeFlow::NODEFLOW_OK;
+}
 
 /** Start the device. kick the watchdog, initialise files, 
  *  Find the Wakeup type. 
