@@ -17,11 +17,21 @@
 #include "rtos.h"
 #include <cmath>
 
+#define XSTR(x) STR(x)
+#define STR(x) #x
+
+#pragma message "BOARD = " XSTR(BOARD)
+#pragma message "EARHART = " XSTR(EARHART_V1_0_0)
+#pragma message "WRIGHT = " XSTR(WRIGHT_V1_0_0)
+#pragma message "DEV BOARD = " XSTR(DEVELOPMENT_BOARD_V1_1_0)
+
 #if BOARD == EARHART_V1_0_0
     #pragma message "TARGET = EARHART"
+    #pragma message "INCLUDING LorawanTP.h"
     #include "LorawanTP.h"
 #elif BOARD == WRIGHT_V1_0_0
     #pragma message "TARGET = WRIGHT"
+    #pragma message "INCLUDING tp_nbiot_interface.h"
     #include "tp_nbiot_interface.h"
 #else
     #pragma message "TARGET UNKNOWN"
