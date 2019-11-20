@@ -62,6 +62,15 @@ enum Flags {
 class NodeFlow: public DataManager{ //, public LorawanTP
 
 public:
+
+    /** Enumerated list of possible comms radio stacks
+     */
+    enum class Comms_Radio_Stack
+    {
+        NBIOT     = 0,
+        LORA      = 1,
+        UNDEFINED = 10
+    };
     
     /** Constructor. Create a NodeFlow interface, connected to the pins specified 
      *  operating at the specified frequency
@@ -227,6 +236,15 @@ public:
     /**Handle Interrupt */
     uint16_t get_interrupt_latency();
     int ovewrite_wakeup_timestamp(uint16_t time_remainder);
+
+    #if BOARD == WRIGHT_V1_0_0
+        Comms_Radio_Stack _comms_stack = Comms_Radio_Stack::NBIOT;
+    #elif BOARD == EARHART_V1_0_0 || BOARD == DEVELOPMENT_BOARD_V1_1_0
+        Comms_Radio_Stack _comms_stack = Comms_Radio_Stack::LORA;
+    #else 
+        Comms_Radio_Stack _comms_stack = Comms_Radio_Stack::UNDEFINED;
+    #endif /* #if BOARD == ... */
+		
 };
 
 
