@@ -10,22 +10,26 @@
 
 /** Includes
  */
-#include "mbed.h"
+#include "config_device.h"
 #include "DataManager.h"
 #include "rtc_api_hal.h"
 #include "TPL5010.h"
-#include <string>
 #include "rtos.h"
 #include <cmath>
-#include "config_device.h"
-#include "LorawanTP.h"
- 
+
+#if BOARD == EARHART_V1_0_0
+    #pragma message "TARGET = EARHART"
+    #include "LorawanTP.h"
+#elif BOARD == WRIGHT_V1_0_0
+    #pragma message "TARGET = WRIGHT"
+#else
+    #pragma message "TARGET UNKNOWN"
+#endif
+
 //#include "board.h"
 #define size(x)  (sizeof(x) / sizeof((x)[0]))
 #define DIVIDE(x) (x)/2
-// #define DEVELOPMENT_BOARD_V1_1_0    0    
-// #define WRIGHT_V1_0_0               1
-// #define EARHART_V1_0_0              2
+
 
 /**Time related defines */
 #define DAYINSEC                    86400
@@ -55,10 +59,10 @@ enum Flags {
 /** Nodeflow Class
  */
 
-class NodeFlow: public DataManager, public LorawanTP{ 
+class NodeFlow: public DataManager{ //, public LorawanTP
 
 public:
-
+    
     /** Constructor. Create a NodeFlow interface, connected to the pins specified 
      *  operating at the specified frequency
      * 
@@ -72,7 +76,6 @@ public:
 
     virtual int setup()=0;
     virtual int HandleInterrupt()=0;
-    
     virtual uint8_t* HandlePeriodic(uint16_t &length)=0; //uint8_t payload[], uint16_t &length
     //virtual uint8_t* HandlePeriodicGroup1(uint16_t &length)=0;
 
@@ -136,6 +139,7 @@ public:
     *               ii) A negative error code on failure.
     *                 
     */
+    #ifdef TARGET_TP_EARHART_V1_0_0
     int joinTTN();
 
    /** Send a message from the Network Server on a specific port.
@@ -160,7 +164,7 @@ public:
     int sendTTN(uint8_t port, uint8_t payload[], uint16_t length);
     
     uint64_t receiveTTN();
-    
+    #endif
     //private:
     
     /** Wakeup/time 

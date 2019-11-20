@@ -10,7 +10,7 @@
 /** Includes
  */
 #include "node_flow.h"
-#include "mbed_debug.h"
+
 /**
  */
 Serial pc(TP_PC_TXU, TP_PC_RXU);
@@ -19,6 +19,9 @@ Serial pc(TP_PC_TXU, TP_PC_RXU);
  */
 TPL5010 wdg(TP_DONE); //PA_5 for earhart
 
+#ifdef TARGET_TP_EARHART_V1_0_0
+LorawanTP lpwan; 
+#endif
 /**Initialise the wakeup flag as UNKNOWN
  */
 int wkp=WAKEUP_UNKNOWN;
@@ -34,37 +37,13 @@ int status = 1;
  * @param frequency_hz The bus frequency in hertz. */
 
  NodeFlow::NodeFlow(PinName write_control, PinName sda, PinName scl, int frequency_hz): 
- DataManager(write_control, sda, scl, frequency_hz), LorawanTP() {
+ DataManager(write_control, sda, scl, frequency_hz) {
  }
 
 /** Destructor. 
  */
  NodeFlow::~NodeFlow() {
  }
-
-/** Define the target 
- */ 
-// int NodeFlow::getPlatform(){
-// #if defined (BOARD) && (BOARD ==TP_DEVELOPMENT_BOARD_V1_1_0)
-    
-//        // return DEVELOPMENT_BOARD_V1_1_0;
-    
-// #endif
-
-// #if defined (BOARD) && (BOARD ==TP_WRIGHT_V1_0_0)
-    
-//       //  return WRIGHT_V1_0_0;
-    
-// #endif
-
-// #if defined (BOARD) && (BOARD ==TP_EARHART_V1_0_0)
-    
-//        // return EARHART_V1_0_0;
-    
-// #endif
-
-// return 0;
-// }
 
 /** Eeprom configuration. 
  *
@@ -247,7 +226,7 @@ int NodeFlow::start(){
 
     if (wkp==WAKEUP_PIN) {
         pc.printf("\r\n--------------------PIN WAKEUP--------------------\r\n");
-        timetodate(time_now());
+        //timetodate(time_now());
         HandleInterrupt();
         next_time=get_interrupt_latency();
         if (next_time>INTERRUPT_DELAY){
@@ -313,7 +292,7 @@ int NodeFlow::HandleModem(){
     uint16_t length=0;
     uint8_t *payload=0;
     payload=HandlePeriodic(length);
-#if defined (BOARD) && (BOARD ==TP_EARHART_V1_0_0)
+#ifdef TARGET_TP_EARHART_V1_0_0
         sendTTN(1, payload, length);            
         receiveTTN();
 #endif
@@ -354,6 +333,7 @@ int NodeFlow::config_init(){
 
     DeviceConfig w_conf;
     w_conf.parameters.device_sn = STM32_UID[0];
+    
     w_conf.parameters.modulation =1;
     status = DataManager::append_file_entry(DeviceConfig_n, w_conf.data, sizeof(w_conf.parameters));
     if (status!=0){
@@ -663,7 +643,7 @@ int NodeFlow::set_scheduler(){
     //the clock synch should be send in 2 bytes, so half the value)
     bool clockSynchOn=0;
     uint16_t cs_time=(2*read_clock_synch_config(clockSynchOn))-time_remainder;
-    if(clockSynchOn==true){
+    if(clockSynchOn){
         if (cs_time<0){
                 cs_time=cs_time+DAYINSEC;
             }
@@ -847,27 +827,27 @@ int NodeFlow::ovewrite_wakeup_timestamp(uint16_t time_remainder){
  */
 uint8_t NodeFlow::get_timestamp(){
     //have to change that for EARHART_V1_0_0 or TARGET NAME
-   #if defined (BOARD) && (BOARD ==TP_EARHART_V1_0_0)
+   #ifdef TARGET_TP_EARHART_V1_0_0
         joinTTN();
         int64_t timestamp=0;
         uint8_t dummy[1]={1};
         uint8_t port=0;
         pc.printf("Horrayy,setting the time, bear with me\r\nRetries are set to %d\r\n",MAX_RETRY_CLOCK_SYNCH);
-        uint8_t retcode=LorawanTP::send_message(223, dummy, sizeof(dummy));
+        uint8_t retcode=lpwan.send_message(223, dummy, sizeof(dummy));
         if(retcode<=0){
             pc.printf("Failed to send\r\n");
             }
-        LorawanTP::receive_message(false);
+        lpwan.receive_message(false);
         ThisThread::sleep_for(1000);
         for(int i=0; ((port!=CLOCK_SYNCH_PORT) && (i<MAX_RETRY_CLOCK_SYNCH));i++) {
         pc.printf("%i. Waiting for a server message dude \r\n",i);
         ThisThread::sleep_for(5000);
-        retcode=LorawanTP::send_message(223, dummy, sizeof(dummy));
+        retcode=lpwan.send_message(223, dummy, sizeof(dummy));
         if(retcode<0){
             pc.printf("Failed to send\r\n");
             }
-        timestamp=LorawanTP::receive_message(false).received_value[0];
-        port=LorawanTP::receive_message(true).port;
+        timestamp=lpwan.receive_message(false).received_value[0];
+        port=lpwan.receive_message(true).port;
 
         }
     
@@ -896,9 +876,10 @@ uint8_t NodeFlow::timetodate(uint32_t remainder_time){
 
 /**LorawanTP
  */
+#ifdef TARGET_TP_EARHART_V1_0_0
 int NodeFlow::joinTTN(){
     
-    int retcode=LorawanTP::join();
+    int retcode=lpwan.join();
         if(retcode<0){
             pc.printf("Failed to join\r\n");}
     
@@ -912,7 +893,7 @@ int NodeFlow::sendTTN(uint8_t port, uint8_t payload[], uint16_t length){
         pc.printf("---------------------SENDING----------------------\r\n");
         timetodate(time_now());
 
-        retcode=LorawanTP::send_message(port, payload, length);
+        retcode=lpwan.send_message(port, payload, length);
         if (retcode<0){
             pc.printf("\r\nError Sending %d bytes", retcode);
         }
@@ -928,13 +909,13 @@ int NodeFlow::sendTTN(uint8_t port, uint8_t payload[], uint16_t length){
 uint64_t NodeFlow::receiveTTN(){
     
     uint16_t decValue=0;
-    decValue=LorawanTP::receive_message(false).received_value[0]; //checking for a 
-    uint8_t port=LorawanTP::receive_message(true).port;
+    decValue=lpwan.receive_message(false).received_value[0]; //checking for a 
+    uint8_t port=lpwan.receive_message(true).port;
     if ( port==SCHEDULER_PORT){
-        uint8_t retcode=LorawanTP::receive_message(true).retcode;
+        uint8_t retcode=lpwan.receive_message(true).retcode;
         overwrite_sched_config(true, DIVIDE(retcode));
         for (int i=0; i<DIVIDE(retcode); i++){
-            decValue=LorawanTP::receive_message(true).received_value[i];
+            decValue=lpwan.receive_message(true).received_value[i];
             pc.printf("%i.RX scheduler: %d(10)\r\n",i, decValue);
             append_sched_config(decValue);
             }
@@ -942,7 +923,7 @@ uint64_t NodeFlow::receiveTTN(){
     
     if(port==CLOCK_SYNCH_PORT){
         bool clockSynchOn=false;
-        uint8_t retcode=LorawanTP::receive_message(true).retcode;
+        uint8_t retcode=lpwan.receive_message(true).retcode;
         if(retcode==1){
             overwrite_clock_synch_config(decValue,false);
         }
@@ -961,6 +942,7 @@ uint64_t NodeFlow::receiveTTN(){
     
     return decValue;
 }
+#endif
 RTC_HandleTypeDef RtcHandle;
 /**Standby
  */
@@ -1028,13 +1010,13 @@ int NodeFlow::get_flags(){
         pc.printf("FlagsConfig. status: %i\r\n", status);
         return status;
     }
-     if (f_conf.parameters.clock_synch==true) {
+     if (f_conf.parameters.clock_synch) {
          return FLAG_CLOCK_SYNCH;
      }
-    if (f_conf.parameters.kick_wdg==true) {
+    if (f_conf.parameters.kick_wdg) {
          return FLAG_WDG;
      }
-     if (f_conf.parameters.sensing_time==true) {
+     if (f_conf.parameters.sensing_time) {
          return FLAG_SENSING;
      }
      return FLAG_SENDING;
@@ -1048,7 +1030,7 @@ int NodeFlow::delay_pin_wakeup(){
         pc.printf("FlagsConfig. status: %i\r\n", status);
         return status;
     }
-     if (f_conf.parameters.pin_wakeup==true) {
+     if (f_conf.parameters.pin_wakeup) {
          return FLAG_WAKEUP_PIN;
      }
      return 0;
@@ -1085,8 +1067,8 @@ void NodeFlow::standby(int seconds, bool wkup_one, bool wkup_two) {
        seconds=6600;
        set_flags_config(true, false, false);
    }
-  #if defined (BOARD) && (BOARD ==TP_EARHART_V1_0_0)
-   int retcode=LorawanTP::sleep();
+  #ifdef TARGET_TP_EARHART_V1_0_0
+   int retcode=lpwan.sleep();
    #endif
    //Without this delay it breaks..?!
    ThisThread::sleep_for(2);
