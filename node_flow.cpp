@@ -598,57 +598,74 @@ int NodeFlow::append_sched_config(uint16_t time_comparator)
     {
         pc.printf("Scheduler Config failed to append: %i\r\n", status);
     }
-    
+
     return status;
 }
 
 //change so the user will choose
-int NodeFlow::overwrite_clock_synch_config(int time_comparator,bool clockSynchOn){
+int NodeFlow::overwrite_clock_synch_config(int time_comparator, bool clockSynchOn)
+{
     ClockSynchConfig c_conf;
     c_conf.parameters.clockSynchOn=clockSynchOn;
     c_conf.parameters.time_comparator=time_comparator;
-    status= DataManager::overwrite_file_entries(ClockSynchConfig_n, c_conf.data, sizeof(c_conf.parameters));
-    if (status!=0){
+    
+    status = DataManager::overwrite_file_entries(ClockSynchConfig_n, c_conf.data, sizeof(c_conf.parameters));
+    if(status != 0)
+    {
         pc.printf("Scheduler Config failed to overwrite: %i\r\n", status);
-        } 
+    } 
+
     return status;
 }
 
-uint16_t NodeFlow::read_clock_synch_config(bool &clockSynchOn){
-       ClockSynchConfig c_conf;
-       status = DataManager::read_file_entry(ClockSynchConfig_n, 0, c_conf.data, sizeof(c_conf.parameters));
-       uint16_t time_remainder=c_conf.parameters.time_comparator;
-       clockSynchOn=c_conf.parameters.clockSynchOn;
-       return time_remainder;
+uint16_t NodeFlow::read_clock_synch_config(bool &clockSynchOn)
+{
+    ClockSynchConfig c_conf;
+    status = DataManager::read_file_entry(ClockSynchConfig_n, 0, c_conf.data, sizeof(c_conf.parameters));
 
- }
+    /** TODO: What's this doing? */
+    uint16_t time_remainder=c_conf.parameters.time_comparator;
 
- uint16_t NodeFlow::read_sched_config(int i){
-       SchedulerConfig r_conf;
-       status = DataManager::read_file_entry(SchedulerConfig_n, i, r_conf.data, sizeof(r_conf.parameters));
-       uint16_t time_remainder=r_conf.parameters.time_comparator;
-       return time_remainder;
+    clockSynchOn=c_conf.parameters.clockSynchOn;
+    return time_remainder;
+}
 
- }
+uint16_t NodeFlow::read_sched_config(int i)
+{
+    SchedulerConfig r_conf;
+    status = DataManager::read_file_entry(SchedulerConfig_n, i, r_conf.data, sizeof(r_conf.parameters));
+
+    /** TODO: time_comparator is already a uint16_t, so do we need to make another one? */
+    uint16_t time_remainder=r_conf.parameters.time_comparator;
+
+    return time_remainder;
+}
+
 /**Sets the flags, for just kicking the watchdog, sensing time,clock synch time, or sending time(NOT YET) */
-int NodeFlow:: set_flags_config(bool kick_wdg, bool sense_time, bool clock_synch){
+int NodeFlow:: set_flags_config(bool kick_wdg, bool sense_time, bool clock_synch)
+{
     FlagsConfig f_conf;
     f_conf.parameters.kick_wdg=kick_wdg;
     f_conf.parameters.sensing_time=sense_time;
     f_conf.parameters.clock_synch=clock_synch;
     f_conf.parameters.sending_time=0;
     f_conf.parameters.pin_wakeup=0;
+
     status= DataManager::overwrite_file_entries(FlagsConfig_n, f_conf.data, sizeof(f_conf.parameters));
-    if (status!=0){
+    if(status != 0)
+    {
         pc.printf("Flags Config failed to overwrite: %i\r\n", status);  
     }
+
     return status;
 }
 
-
-int NodeFlow::set_wakeup_pin_flag(bool wakeup_pin){
+int NodeFlow::set_wakeup_pin_flag(bool wakeup_pin)
+{
     FlagsConfig f_conf;
     status=DataManager::read_file_entry(FlagsConfig_n, 0, f_conf.data,sizeof(f_conf.parameters));
+
+    /* TODO: Can we just read f_conf.data, set pin_wakeup and then overwrite the file entry? */
     uint8_t kick_wdg=f_conf.parameters.kick_wdg;
     uint8_t sensing_flag=f_conf.parameters.sensing_time;
     uint8_t cs_flag=f_conf.parameters.clock_synch;
@@ -660,13 +677,15 @@ int NodeFlow::set_wakeup_pin_flag(bool wakeup_pin){
     f_conf.parameters.pin_wakeup=wakeup_pin;
     
     status= DataManager::overwrite_file_entries(FlagsConfig_n, f_conf.data, sizeof(f_conf.parameters));
-    if (status!=0){
+    if(status != 0)
+    {
         pc.printf(" wakeup Flags Config failed to overwrite: %i\r\n", status);  
     }
     return status;
 }
 
-/**Ignore this for now */
+/**Ignore this for now 
+ */
 int NodeFlow::add_sensors() { //uint8_t device_id[],uint16_t reading_time[],size_t number_of_sensors
     pc.printf("\r\n-------------------ADD SENSORS--------------------\r\n");
     /** Files Initialisation
@@ -710,69 +729,85 @@ int NodeFlow::add_sensors() { //uint8_t device_id[],uint16_t reading_time[],size
 
 /**Returns seconds until next reading. Sets the flags for the next event in case of timer wakeup
  */
-int NodeFlow::set_scheduler(){
-
+int NodeFlow::set_scheduler()
+{
     pc.printf("\r\n-----------------NEXT READING TIME----------------\r\n");
 
     bool schedulerOn=read_sched_config(0);
     uint16_t length=read_sched_config(1);
     uint32_t timediff_temp=DAYINSEC;
-    if (schedulerOn==true){
-        if (flags==NodeFlow::FLAG_CLOCK_SYNCH){
+
+    /** TODO: No need to explitly check for true */
+    if(schedulerOn == true)
+    {
+        if(flags == NodeFlow::FLAG_CLOCK_SYNCH)
+        {
             get_timestamp();
         }
-    uint32_t time_remainder=this->time_now();
-    //Read the schedule time config, find the next time
-    int32_t timediff=6600;
-    uint32_t next_sch_time=0;
-    
-    pc.printf("%d Scheduled times\r",length);
-    for (int i=0; i<length; i++){
-        uint32_t scheduled_times=read_sched_config(i+2)*2;
-        //Make sure that the time does not exceeds 24 hours(user mistake)
-        scheduled_times=scheduled_times%DAYINSEC;
 
-        timediff=scheduled_times-time_remainder;
-        if (timediff<0){
-            timediff=timediff+DAYINSEC;
+        uint32_t time_remainder=this->time_now();
+        //Read the schedule time config, find the next time
+        int32_t timediff=6600;
+        uint32_t next_sch_time=0;
+    
+        pc.printf("%d Scheduled times\r",length);
+
+        for (int i=0; i<length; i++)
+        {
+            uint32_t scheduled_times=read_sched_config(i+2)*2;
+            //Make sure that the time does not exceeds 24 hours(user mistake)
+            scheduled_times=scheduled_times%DAYINSEC;
+            timediff=scheduled_times-time_remainder;
+
+            if(timediff<0)
+            {
+                timediff=timediff+DAYINSEC;
+            }
+            if (timediff<timediff_temp)
+            {
+                timediff_temp=timediff; //holds the smallest different form time_now
+                next_sch_time=scheduled_times;
+                set_flags_config(false, true, false);    
+            }  
         }
-        if (timediff<timediff_temp){
-            timediff_temp=timediff; //holds the smallest different form time_now
-            next_sch_time=scheduled_times;
-            set_flags_config(false, true, false);    
-        }  
-    }
-    pc.printf("\nNext sensing time,");
-    timetodate(next_sch_time);
-    //the clock synch should be send in 2 bytes, so half the value)
-    bool clockSynchOn=0;
-    uint16_t cs_time=(2*read_clock_synch_config(clockSynchOn))-time_remainder;
-    if(clockSynchOn){
-        if (cs_time<0){
+
+        pc.printf("\nNext sensing time,");
+        timetodate(next_sch_time);
+        //the clock synch should be send in 2 bytes, so half the value)
+        bool clockSynchOn=0;
+        uint16_t cs_time=(2*read_clock_synch_config(clockSynchOn))-time_remainder;
+        
+        if(clockSynchOn)
+        {
+            if(cs_time < 0)
+            {
                 cs_time=cs_time+DAYINSEC;
             }
-    }
+        }
     
-    if(cs_time<timediff_temp){
-        timediff_temp=cs_time;
-        set_flags_config(false, false, true);
+        if(cs_time<timediff_temp)
+        {
+            timediff_temp=cs_time;
+            set_flags_config(false, false, true);
+        }
+        
+        /** TODO: We do this check in enter_standby, do we need it here too? */
+        //Check that its not more than 2 hours
+        if (timediff_temp>7200)  
+        {
+            timediff_temp=6600;
+            //set_flags_config(bool kick_wdg, bool sense_time, bool clock_synch)
+            set_flags_config(true, false, false);
+        } 
     }
-    //Check that its not more than 2 hours
-    if (timediff_temp>7200)  {
-        timediff_temp=6600;
-        //set_flags_config(bool kick_wdg, bool sense_time, bool clock_synch)
-        set_flags_config(true, false, false);
+    else if(schedulerOn == false)
+    {
+        timediff_temp=set_reading_time();  
     } 
-   }
-else if(schedulerOn==false){
-    timediff_temp=set_reading_time();  
-} 
 
+    ovewrite_wakeup_timestamp(timediff_temp);
 
-
-ovewrite_wakeup_timestamp(timediff_temp);
-
-return timediff_temp;   
+    return timediff_temp;   
 }
 
 int NodeFlow::set_reading_time(){ 
