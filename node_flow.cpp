@@ -255,10 +255,10 @@ void NodeFlow::start(){
         next_time=get_interrupt_latency();
         if (next_time>INTERRUPT_DELAY){
             set_wakeup_pin_flag(true);
-            sleep_manager.standby(INTERRUPT_DELAY,false);
+            enter_standby(INTERRUPT_DELAY,false);
         }
          else{
-            sleep_manager.standby(next_time,false);
+            enter_standby(next_time,false);
         }
     }
     else if (wkp==TP_Sleep_Manager::WakeupType_t::WAKEUP_TIMER) {
@@ -308,7 +308,7 @@ void NodeFlow::start(){
         next_time=set_scheduler();      
     }
     pc.printf("\nGoing to sleep for %d",next_time);
-    sleep_manager.standby(next_time,true);  
+    enter_standby(next_time,true);  
 }
 
 int NodeFlow::HandleModem(){
@@ -1001,6 +1001,27 @@ int NodeFlow::delay_pin_wakeup(){
      return 0;
 }
 
+void NodeFlow::enter_standby(int seconds, bool wkup_one) 
+{ 
+    if(seconds < 2)
+    {
+        seconds = 2;
+    } 
+    else if(seconds > 6600)
+    {
+        seconds = 6600;
+        set_flags_config(true, false, false);
+    }
+
+    #ifdef TARGET_TP_EARHART_V1_0_0
+        int retcode=lpwan.sleep();
+    #endif
+
+    //Without this delay it breaks..?!
+    ThisThread::sleep_for(2);
+
+    sleep_manager.standby(seconds, wkup_one);
+}
 
 
 

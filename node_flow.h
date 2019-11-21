@@ -247,6 +247,8 @@ public:
     uint16_t get_interrupt_latency();
     int ovewrite_wakeup_timestamp(uint16_t time_remainder);
 
+    void enter_standby(int seconds, bool wkup_one);
+
     TPL5010 watchdog;
 
     TP_Sleep_Manager sleep_manager;
