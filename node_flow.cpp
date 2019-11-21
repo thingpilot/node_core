@@ -1002,6 +1002,15 @@ int NodeFlow::delay_pin_wakeup(){
      return 0;
 }
 
+/** Manage device sleep times before calling sleep_manager.standby().
+ *  Ensure that the maximum time the device can sleep for is 6600 seconds,
+ *  this is due to the watchdog timer timeout, set at 7200 seconds
+ *
+ * @param seconds Number of seconds to sleep for 
+ * @param wkup_one If true the device will respond to rising edge interrupts
+ *                 on WKUP_PIN1
+ * @return None 
+ */
 void NodeFlow::enter_standby(int seconds, bool wkup_one) 
 { 
     if(seconds < 2)
