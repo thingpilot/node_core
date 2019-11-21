@@ -462,112 +462,143 @@ int NodeFlow::config_init()
     return 0;
 }
 
-/**How the user will erase the value?! daily, after sending?  */
-int NodeFlow::read_increment(){
+/** How the user will erase the value?! daily, after sending?  
+ */
+int NodeFlow::read_increment()
+{
     IncrementConfig i_conf;
     status = DataManager::read_file_entry(IncrementConfig_n, 0, i_conf.data, sizeof(i_conf.parameters));
     int increment=i_conf.parameters.increment;
     //pc.printf("Increment value: %d\r\n",increment);
     return increment;
 }
-int NodeFlow::increment(int i){
+
+int NodeFlow::increment(int i)
+{
     IncrementConfig i_conf;
     int incrementt=read_increment();
     i_conf.parameters.increment=i+incrementt;
+
     status= DataManager::overwrite_file_entries(IncrementConfig_n, i_conf.data, sizeof(i_conf.parameters));
     if (status!=0){
         pc.printf("IncrementConfig failed to overwrite: %i\r\n", status);   
     }
+
     status = DataManager::read_file_entry(IncrementConfig_n, 0, i_conf.data, sizeof(i_conf.parameters));
     int increment=i_conf.parameters.increment;
     
     return increment;
 }
 
-int NodeFlow::sensor_config_init(int length){
-
+int NodeFlow::sensor_config_init(int length)
+{
     DataManager_FileSystem::File_t SensorConfig_File_t;
     SensorConfig_File_t.parameters.filename = SensorConfig_n;
     SensorConfig_File_t.parameters.length_bytes = sizeof(SensorConfig::parameters);
+
     status=DataManager::add_file(SensorConfig_File_t, length);
-        if (status!=0){
-            pc.printf("Add file failed: %i\r\n", status);
-            return status; 
-            }
+    if (status!=0) 
+    {
+        pc.printf("Add file failed: %i\r\n", status);
+        return status; 
+    }
     
     DataManager_FileSystem::File_t TempSensorConfig_File_t;
     TempSensorConfig_File_t.parameters.filename = TempSensorConfig_n;
     TempSensorConfig_File_t.parameters.length_bytes = sizeof(TempSensorConfig::parameters);
+
     status = DataManager::add_file(TempSensorConfig_File_t, length);
-        if(status!=0){
-             pc.printf("Add file failed: %i\r\n", status);
-             return status;
-             }
+    if(status!=0)
+    {
+        pc.printf("Add file failed: %i\r\n", status);
+        return status;
+    }
+
     return 0;   
 }
+
 /** Get global stats
+ *
  * @return Status
  */
-int NodeFlow::get_global_stats() {
+int NodeFlow::get_global_stats() 
+{
     DataManager_FileSystem::GlobalStats_t g_stats;
     status = DataManager::get_global_stats(g_stats.data);
     DataManager::print_global_stats(pc, g_stats);
  
- return status;
+    return status;
 }
 
 /** Initialise the time config file
  *  @return Status
  */
-int NodeFlow::time_config_init(){
+int NodeFlow::time_config_init()
+{
     DataManager_FileSystem::File_t TimeConfig_File_t;
     TimeConfig_File_t.parameters.filename = TimeConfig_n;
     TimeConfig_File_t.parameters.length_bytes = sizeof(TimeConfig::parameters);
-    status=DataManager::add_file(TimeConfig_File_t, 1);
+    status = DataManager::add_file(TimeConfig_File_t, 1);
 
-    if (status!=0){
+    if(status != 0)
+    {
         pc.printf("Time Config failed: %i\r\n", status);  
     }
     
-    status=set_time_config(0);
+    status = set_time_config(0);
     return status;
 }
 
-int NodeFlow::set_time_config(int time_comparator){
+int NodeFlow::set_time_config(int time_comparator)
+{
     TimeConfig t_conf;
     t_conf.parameters.time_comparator=time_comparator;
+
     status= DataManager::overwrite_file_entries(TimeConfig_n, t_conf.data, sizeof(t_conf.parameters));
-    if (status!=0){
+    if(status != 0)
+    {
         pc.printf("Time Config failed to overwrite: %i\r\n", status);
     }
     
     return status;
 }
+
 /** Scheduler Config overwrite in case of a received_message, should be less than the MAX_BUFFER_READING_TIMES
- */
- 
-int NodeFlow::overwrite_sched_config(uint16_t code,uint16_t length){
+ */ 
+int NodeFlow::overwrite_sched_config(uint16_t code,uint16_t length)
+{
     SchedulerConfig t_conf;
     //code,length,values
     t_conf.parameters.time_comparator=code;
+
     status= DataManager::overwrite_file_entries(SchedulerConfig_n, t_conf.data, sizeof(t_conf.parameters));
-    if (status!=0){
+    if(status != 0)
+    {
         pc.printf("Scheduler Config failed to overwrite: %i\r\n", status);
-        }
+    }
+
     t_conf.parameters.time_comparator=length;
-    status= DataManager::append_file_entry(SchedulerConfig_n, t_conf.data, sizeof(t_conf.parameters));
-    if (status!=0){
+
+    status = DataManager::append_file_entry(SchedulerConfig_n, t_conf.data, sizeof(t_conf.parameters));
+    if(status != 0)
+    {
         pc.printf("Scheduler Config failed to append: %i\r\n", status);
-        }
+    }
+
     return status;
 }
-int NodeFlow::append_sched_config(uint16_t time_comparator){
+
+int NodeFlow::append_sched_config(uint16_t time_comparator)
+{
     SchedulerConfig t_conf;
     t_conf.parameters.time_comparator=time_comparator;
+
     status= DataManager::append_file_entry(SchedulerConfig_n, t_conf.data, sizeof(t_conf.parameters));
-    if (status!=0){
+    if(status != 0)
+    {
         pc.printf("Scheduler Config failed to append: %i\r\n", status);
-        }
+    }
+    
     return status;
 }
 
