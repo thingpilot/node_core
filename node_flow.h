@@ -71,6 +71,18 @@ public:
         NODEFLOW_OK = 0
     };
 
+        /** Enumerated list of flags 
+         */
+        enum Flags 
+        {
+            FLAG_WDG         = 0,
+            FLAG_SENSING     = 1,
+            FLAG_CLOCK_SYNCH = 2,
+            FLAG_SENDING     = 3,
+            FLAG_WAKEUP_PIN  = 4,
+            FLAG_UNKNOWN     = 5            
+        };
+
     /** Enumerated list of possible comms radio stacks
      */
     enum class Comms_Radio_Stack
