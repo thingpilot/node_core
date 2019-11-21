@@ -15,9 +15,9 @@
  */
 Serial pc(TP_PC_TXU, TP_PC_RXU);
 
-#ifdef TARGET_TP_EARHART_V1_0_0
+#if BOARD == EARHART_V1_0_0
 LorawanTP lpwan; 
-#endif
+#endif /* #if BOARD == EARHART_V1_0_0 */
 
 /**Initialise the wakeup flag as UNKNOWN
  */
@@ -228,6 +228,7 @@ enum Filenames
  *  regress to minimum functionality in order to conserve power whilst
  *  the application decides what to do
  */
+#if BOARD == WRIGHT_V1_0_0
 int NodeFlow::initialise_nbiot()
 {
     int status = _radio.start();
@@ -238,6 +239,7 @@ int NodeFlow::initialise_nbiot()
 
     return NodeFlow::NODEFLOW_OK;
 }
+#endif /* #if BOARD == WRIGHT_V1_0_0 */
 
 /** Start the device. kick the watchdog, initialise files, 
  *  Find the Wakeup type. 
@@ -315,10 +317,10 @@ int NodeFlow::HandleModem(){
     uint16_t length=0;
     uint8_t *payload=0;
     payload=HandlePeriodic(length);
-#ifdef TARGET_TP_EARHART_V1_0_0
+#if BOARD == EARHART_V1_0_0
         sendTTN(1, payload, length);            
         receiveTTN();
-#endif
+#endif /* #if BOARD == EARHART_V1_0_0 */
 
   return 0;
 }
@@ -849,8 +851,7 @@ int NodeFlow::ovewrite_wakeup_timestamp(uint16_t time_remainder){
 
  */
 uint8_t NodeFlow::get_timestamp(){
-    //have to change that for EARHART_V1_0_0 or TARGET NAME
-   #ifdef TARGET_TP_EARHART_V1_0_0
+   #if BOARD == EARHART_V1_0_0
         joinTTN();
         int64_t timestamp=0;
         uint8_t dummy[1]={1};
@@ -874,7 +875,7 @@ uint8_t NodeFlow::get_timestamp(){
 
         }
     
-#endif
+    #endif /* BOARD == EARHART_V1_0_0 */
 
     return 0;   
 }
@@ -899,7 +900,7 @@ uint8_t NodeFlow::timetodate(uint32_t remainder_time){
 
 /**LorawanTP
  */
-#ifdef TARGET_TP_EARHART_V1_0_0
+#if BOARD == EARHART_V1_0_0
 int NodeFlow::joinTTN(){
     
     int retcode=lpwan.join();
@@ -965,7 +966,7 @@ uint64_t NodeFlow::receiveTTN(){
     
     return decValue;
 }
-#endif
+#endif /* #if BOARD == EARHART_V1_0_0 */
 
 
 int NodeFlow::get_flags(){    
@@ -1013,9 +1014,9 @@ void NodeFlow::enter_standby(int seconds, bool wkup_one)
         set_flags_config(true, false, false);
     }
 
-    #ifdef TARGET_TP_EARHART_V1_0_0
+    #if BOARD == EARHART_V1_0_0
         int retcode=lpwan.sleep();
-    #endif
+    #endif /* BOARD == EARHART_V1_0_0 */
 
     //Without this delay it breaks..?!
     ThisThread::sleep_for(2);
