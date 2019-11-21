@@ -255,10 +255,10 @@ void NodeFlow::start(){
         next_time=get_interrupt_latency();
         if (next_time>INTERRUPT_DELAY){
             set_wakeup_pin_flag(true);
-            sleep_manager.standby(INTERRUPT_DELAY,false);
+            enter_standby(INTERRUPT_DELAY,false);
         }
          else{
-            sleep_manager.standby(next_time,false);
+            enter_standby(next_time,false);
         }
     }
     else if (wkp==TP_Sleep_Manager::WakeupType_t::WAKEUP_TIMER) {
@@ -308,7 +308,7 @@ void NodeFlow::start(){
         next_time=set_scheduler();      
     }
     pc.printf("\nGoing to sleep for %d",next_time);
-    sleep_manager.standby(next_time,true);  
+    enter_standby(next_time,true);  
 }
 
 int NodeFlow::HandleModem(){
