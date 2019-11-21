@@ -1106,6 +1106,7 @@ uint64_t NodeFlow::receiveTTN(){
 #endif /* #if BOARD == EARHART_V1_0_0 */
 
 
+/** TODO: Indentation */
 int NodeFlow::get_flags(){    
     FlagsConfig f_conf;
     status=DataManager::read_file_entry(FlagsConfig_n, 0, f_conf.data,sizeof(f_conf.parameters));
