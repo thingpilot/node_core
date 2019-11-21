@@ -21,7 +21,7 @@ LorawanTP lpwan;
 
 /**Initialise the wakeup flag as UNKNOWN
  */
-int flags=FLAG_UNKNOWN;
+int flags=NodeFlow::FLAG_UNKNOWN;
 int status = 1;
 
 /** Constructor. Create a NodeFlow interface, connected to the pins specified 
@@ -262,7 +262,7 @@ void NodeFlow::start(){
         }
     }
     else if (wkp==TP_Sleep_Manager::WakeupType_t::WAKEUP_TIMER) {
-        if(delay_pin_wakeup()==FLAG_WAKEUP_PIN){
+        if(delay_pin_wakeup()==NodeFlow::FLAG_WAKEUP_PIN){
             set_wakeup_pin_flag(false);
             next_time=get_interrupt_latency();
         }
@@ -637,7 +637,7 @@ int NodeFlow::set_scheduler(){
     uint16_t length=read_sched_config(1);
     uint32_t timediff_temp=DAYINSEC;
     if (schedulerOn==true){
-        if (flags==FLAG_CLOCK_SYNCH){
+        if (flags==NodeFlow::FLAG_CLOCK_SYNCH){
             get_timestamp();
         }
     uint32_t time_remainder=this->time_now();
@@ -911,7 +911,7 @@ int NodeFlow::joinTTN(){
 int NodeFlow::sendTTN(uint8_t port, uint8_t payload[], uint16_t length){
     int retcode=0;
     
-    // if (wkp==WAKEUP_TIMER && flags==FLAG_SENSING){
+    // if (wkp==WAKEUP_TIMER && flags==NodeFlow::FLAG_SENSING){
         joinTTN();
         pc.printf("---------------------SENDING----------------------\r\n");
         timetodate(time_now());
@@ -976,15 +976,15 @@ int NodeFlow::get_flags(){
         return status;
     }
      if (f_conf.parameters.clock_synch) {
-         return FLAG_CLOCK_SYNCH;
+         return NodeFlow::FLAG_CLOCK_SYNCH;
      }
     if (f_conf.parameters.kick_wdg) {
-         return FLAG_WDG;
+         return NodeFlow::FLAG_WDG;
      }
      if (f_conf.parameters.sensing_time) {
-         return FLAG_SENSING;
+         return NodeFlow::FLAG_SENSING;
      }
-     return FLAG_SENDING;
+     return NodeFlow::FLAG_SENDING;
 
 }
 
@@ -996,7 +996,7 @@ int NodeFlow::delay_pin_wakeup(){
         return status;
     }
      if (f_conf.parameters.pin_wakeup) {
-         return FLAG_WAKEUP_PIN;
+         return NodeFlow::FLAG_WAKEUP_PIN;
      }
      return 0;
 }
