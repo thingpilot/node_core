@@ -343,31 +343,42 @@ int NodeFlow::HandleModem()
 /** Initialise the EEPROM
  * @return Status
  */
-int NodeFlow::initialise(){    
+int NodeFlow::initialise()
+{    
     status=DataManager::init_filesystem();
-    if(status!=DATA_MANAGER_OK){
+    if(status!=DATA_MANAGER_OK)
+    {
         status=DataManager::init_filesystem();
     }
+
     bool initialised = false;
     status=DataManager::is_initialised(initialised);
-    if(status!=DATA_MANAGER_OK){
+    if(status!=DATA_MANAGER_OK)
+    {
        status=DataManager::is_initialised(initialised);
     }
-    if(status!=0){
+
+    if(status!=0)
+    {
         pc.printf("Filesystem initialisation failed. status: %i, is initialised: %i\r\n", status, initialised);
     }
+
     config_init();
        
-return status;
+    return status;
 }
 
-int NodeFlow::config_init(){
-/**DeviceConfig */
+int NodeFlow::config_init()
+{
+    /** DeviceConfig 
+     */
     DataManager_FileSystem::File_t DeviceConfig_File_t;
     DeviceConfig_File_t.parameters.filename = DeviceConfig_n;
     DeviceConfig_File_t.parameters.length_bytes = sizeof( DeviceConfig::parameters);
+
     status=DataManager::add_file(DeviceConfig_File_t, 1); 
-    if (status!=0){
+    if(status!=0)
+    {
         pc.printf("Device Config failed: %i\r\n", status); 
         return status;  
     }
@@ -377,59 +388,80 @@ int NodeFlow::config_init(){
     
     w_conf.parameters.modulation =1;
     status = DataManager::append_file_entry(DeviceConfig_n, w_conf.data, sizeof(w_conf.parameters));
-    if (status!=0){
+    if(status!=0)
+    {
         pc.printf("DeviceConfig error: %i status: %i\r\n", 0, status);
         return status; 
     }
-/**SchedulerConfig */
+
+    /** SchedulerConfig 
+     */
     DataManager_FileSystem::File_t SchedulerConfig_File_t;
     SchedulerConfig_File_t.parameters.filename = SchedulerConfig_n;
     SchedulerConfig_File_t.parameters.length_bytes = sizeof( SchedulerConfig::parameters);
+
     status=DataManager::add_file(SchedulerConfig_File_t, MAX_BUFFER_READING_TIMES); 
-    if (status!=0){
+    if(status!=0)
+    {
         pc.printf("Scheduler Config failed: %i\r\n", status);
         return status;   
     }
-  /**ClockSynchConfig */
+
+    /** ClockSynchConfig 
+     */
     DataManager_FileSystem::File_t ClockSynchConfig_File_t;
     ClockSynchConfig_File_t.parameters.filename = ClockSynchConfig_n;
     ClockSynchConfig_File_t.parameters.length_bytes = sizeof( ClockSynchConfig::parameters);
+
     status=DataManager::add_file(ClockSynchConfig_File_t, 1); 
-    if (status!=0){
+    if(status!=0)
+    {
         pc.printf("ClockSynchConfig failed: %i\r\n", status);
         return status;   
     }
     overwrite_clock_synch_config(DIVIDE(CLOCK_SYNCH_TIME),CLOCK_SYNCH);
     
-/**FlagsConfig*/
+    /** FlagsConfig
+     */
     DataManager_FileSystem::File_t FlagsConfig_File_t;
     FlagsConfig_File_t.parameters.filename = FlagsConfig_n;
     FlagsConfig_File_t.parameters.length_bytes = sizeof(FlagsConfig::parameters);
+
     status=DataManager::add_file(FlagsConfig_File_t, 1);
-    if (status!=0){
+    if(status!=0)
+    {
         pc.printf("FLAGS Config failed: %i\r\n", status);
         return status;   
     }
+
     status=set_flags_config(false, false, false);  //sensing true
-/**IncrementConfig*/
+
+    /** IncrementConfig
+     */
     DataManager_FileSystem::File_t IncrementConfig_File_t;
     IncrementConfig_File_t.parameters.filename = IncrementConfig_n;
     IncrementConfig_File_t.parameters.length_bytes = sizeof(IncrementConfig::parameters);
+
     status=DataManager::add_file(IncrementConfig_File_t, 1);
-    if (status!=0){
+    if(status!=0)
+    {
         pc.printf("FLAGS Config failed: %i\r\n", status);
         return status;   
     }
+
     IncrementConfig i_conf;
     i_conf.parameters.increment=0;
+
     status= DataManager::append_file_entry(IncrementConfig_n, i_conf.data, sizeof(i_conf.parameters));
-    if (status!=0){
+    if(status!=0)
+    {
         pc.printf("IncrementConfig failed to overwrite: %i\r\n", status);
         return status; 
     }
 
-return 0;
+    return 0;
 }
+
 /**How the user will erase the value?! daily, after sending?  */
 int NodeFlow::read_increment(){
     IncrementConfig i_conf;
