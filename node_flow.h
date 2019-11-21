@@ -117,7 +117,7 @@ public:
     int HandleModem();
     /** Initialise device.
      */
-    int start();
+    void start();
 
     /** Add sensors ids
      *  

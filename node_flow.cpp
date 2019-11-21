@@ -243,10 +243,8 @@ int NodeFlow::initialise_nbiot()
 
 /** Start the device. kick the watchdog, initialise files, 
  *  Find the Wakeup type. 
- *  
- * @return wkp. Indicates the wakeup type so the user will be able to change the specific logic.
  */
-int NodeFlow::start(){
+void NodeFlow::start(){
     uint16_t next_time=0;
     wdg.kick();
 
