@@ -1001,6 +1001,27 @@ int NodeFlow::delay_pin_wakeup(){
      return 0;
 }
 
+void NodeFlow::enter_standby(int seconds, bool wkup_one) 
+{ 
+    if(seconds < 2)
+    {
+        seconds = 2;
+    } 
+    else if(seconds > 6600)
+    {
+        seconds = 6600;
+        set_flags_config(true, false, false);
+    }
+
+    #ifdef TARGET_TP_EARHART_V1_0_0
+        int retcode=lpwan.sleep();
+    #endif
+
+    //Without this delay it breaks..?!
+    ThisThread::sleep_for(2);
+
+    sleep_manager.standby(seconds, wkup_one);
+}
 
 
 
