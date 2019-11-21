@@ -89,10 +89,29 @@ class NodeFlow: public DataManager
 
         ~NodeFlow();
 
-        virtual int setup()=0;
-        virtual int HandleInterrupt()=0;
-        virtual uint8_t* HandlePeriodic(uint16_t &length)=0; //uint8_t payload[], uint16_t &length
-        //virtual uint8_t* HandlePeriodicGroup1(uint16_t &length)=0;
+        /** Virtual functions START *****************************************************************************
+         *  Virtual functions MUST be overridden by the application developer. The description of these functions 
+         *  is given above each virtual definition
+         */
+        
+        /** setup() allows the user to write code that will only be executed once when the device is initialising.
+         *  This is akin to Arduino's setup function and can be used to, for example, configure a sensor
+         */
+        virtual int setup() = 0;
+
+        /** HandleInterrupt() allows the user to define what should happen if an interrupt wakes the processor
+         *  from sleep. For example, an accelerometer could be configured to detect when the device is moving 
+         *  and alert the processor to this to trigger an upload of the devices current location
+         */
+        virtual int HandleInterrupt() = 0;
+
+        /** HandlePeriodic() allows the user to periodically read any sensors that are on the board. Every variant 
+         *  of a board is different, users different sensors, and thus requires application-specific code in order
+         *  to interact with the sensors. This is where that code should be
+         */  
+        virtual uint8_t* HandlePeriodic(uint16_t &length) = 0; //uint8_t payload[], uint16_t &length
+        /** Virtual functions END ********************************************************************************/ 
+         
 
         /** Attempt to connect to NB-IoT network with default parameters
          *  described in tp_nbiot_interface.h. The function blocks and will
