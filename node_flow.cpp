@@ -11,8 +11,6 @@
  */
 #include "node_flow.h"
 
-/**
- */
 Serial pc(TP_PC_TXU, TP_PC_RXU);
 
 #if BOARD == EARHART_V1_0_0
@@ -51,34 +49,31 @@ NodeFlow::NodeFlow(PinName write_control, PinName sda, PinName scl, int frequenc
 
 /** Destructor. 
  */
- NodeFlow::~NodeFlow() {
+ NodeFlow::~NodeFlow() 
+ {
+
  }
 
 /** Eeprom configuration. 
  *
  * @param DeviceConfig. Device specifics- send with the message payload.
- *
  * @param SensorDataConfig. Each sensor will be able to store a specific amount of values (to be specified).
- *
  * @param SchedulerConfig. Holds the scheduled times by the user.
- *
  * @param SensorConfig. Each sensor is registered in the Sensor config file.
- *
- **/
-    union DeviceConfig
+ */
+union DeviceConfig
 {
     struct 
     {
         uint32_t device_sn; //Device unique id?! our unique id?
-        uint8_t modulation; //defined 0 or 1 for lora, nbiot respectively, 
-        
+        uint8_t modulation; //defined 0 or 1 for lora, nbiot respectively,    
     } parameters;
 
     char data[sizeof(DeviceConfig::parameters)];
 };
 
-/**We need to agree on what this shoud be, data formatter? 
- * I think 
+/** We need to agree on what this shoud be, data formatter? 
+ *  I think 
  */
 union SensorDataConfig
 {
@@ -92,17 +87,19 @@ union SensorDataConfig
     char data[sizeof(SensorDataConfig::parameters)];
 };
 
-/**The User can define MAX_BUFFER_READING_TIMES */
+/** The User can define MAX_BUFFER_READING_TIMES 
+ */
 union SchedulerConfig
 {
     struct 
     {   
-        uint16_t time_comparator; //fisrt value holds status, second holds length of the array
+        uint16_t time_comparator; //first value holds status, second holds length of the array
         
     } parameters;
 
     char data[sizeof(SchedulerConfig::parameters)];
 };
+
 union ClockSynchConfig
 {
     struct 
@@ -114,8 +111,10 @@ union ClockSynchConfig
 
     char data[sizeof(ClockSynchConfig::parameters)];
 };
-/**Program specific flags*/
-   union FlagsConfig
+
+/** Program specific flags
+ */
+union FlagsConfig
 {
     struct 
     {    bool  sensing_time; //both sending&sensing time for lora
@@ -123,13 +122,11 @@ union ClockSynchConfig
          bool  kick_wdg;
          bool  sending_time; //only for NBIOT
          bool  pin_wakeup;
-         bool  flag;
-       
+         bool  flag;   
     } parameters;
 
     char data[sizeof(FlagsConfig::parameters)];
 };
-
 
 union NextTimeConfig
 {
@@ -142,7 +139,7 @@ union NextTimeConfig
     char data[sizeof(NextTimeConfig::parameters)];
 };
 
-   union IncrementConfig
+union IncrementConfig
 {
     struct 
     {    
@@ -152,27 +149,26 @@ union NextTimeConfig
     char data[sizeof(IncrementConfig::parameters)];
 };
 
-/**Sensor Config,TempSensorConfig, Time Config&&TempConfig be used in later version 
- * if the user wants to "register" each sensor for different reading times */
-   union SensorConfig
+/** Sensor Config,TempSensorConfig, Time Config&&TempConfig be used in later version 
+ *  if the user wants to "register" each sensor for different reading times 
+ */
+union SensorConfig
 {
     struct 
-    {   uint8_t device_id;
+    {   
+        uint8_t device_id;
         uint16_t time_comparator; 
-       
-    
     } parameters;
 
     char data[sizeof(SensorConfig::parameters)];
 };
 
-   union TempSensorConfig
+union TempSensorConfig
 {
     struct 
-    {   uint8_t  device_id;
+    {   
+        uint8_t  device_id;
         uint16_t time_comparator; 
-       
-    
     } parameters;
 
     char data[sizeof(TempSensorConfig::parameters)];
@@ -191,13 +187,12 @@ union TimeConfig
     char data[sizeof(TimeConfig::parameters)];
 };
 
-   union TempConfig
+union TempConfig
 {
     struct 
-    {   uint8_t  device_id;
+    {   
+        uint8_t  device_id;
         uint16_t time_comparator; 
-       
-    
     } parameters;
 
     char data[sizeof(TempConfig::parameters)];
@@ -206,29 +201,28 @@ union TimeConfig
 
 /** Each filename in the eeprom hold a unique number
  */
-
 enum Filenames
 {
-    DeviceConfig_n          = 0,
-    SensorDataConfig        = 1, 
-    SchedulerConfig_n       = 2,
-    ClockSynchConfig_n      = 3,
-    FlagsConfig_n           = 4, //wdg,clock synch, sensing,sending
-    IncrementConfig_n       = 5,
-    SensorConfig_n          = 6, //not using for now
-    TimeConfig_n            = 7,
-    TempSensorConfig_n      = 8,
-    TempConfig_n            = 9,
-    NextTimeConfig_n        = 10
+    DeviceConfig_n     = 0,
+    SensorDataConfig   = 1, 
+    SchedulerConfig_n  = 2,
+    ClockSynchConfig_n = 3,
+    FlagsConfig_n      = 4, //wdg,clock synch, sensing,sending
+    IncrementConfig_n  = 5,
+    SensorConfig_n     = 6, //not using for now
+    TimeConfig_n       = 7,
+    TempSensorConfig_n = 8,
+    TempConfig_n       = 9,
+    NextTimeConfig_n   = 10
  };
 
+#if BOARD == WRIGHT_V1_0_0
 /** Attempt to connect to NB-IoT network with default parameters
  *  described in tp_nbiot_interface.h. The function blocks and will
  *  time out after 5 minutes at which point the NB-IoT modem will 
  *  regress to minimum functionality in order to conserve power whilst
  *  the application decides what to do
  */
-#if BOARD == WRIGHT_V1_0_0
 int NodeFlow::initialise_nbiot()
 {
     int status = _radio.start();
