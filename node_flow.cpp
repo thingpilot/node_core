@@ -22,9 +22,9 @@ TPL5010 wdg(TP_DONE); //PA_5 for earhart
 #ifdef TARGET_TP_EARHART_V1_0_0
 LorawanTP lpwan; 
 #endif
+
 /**Initialise the wakeup flag as UNKNOWN
  */
-int wkp=WAKEUP_UNKNOWN;
 int flags=FLAG_UNKNOWN;
 int status = 1;
 
@@ -243,29 +243,27 @@ int NodeFlow::initialise_nbiot()
 
 /** Start the device. kick the watchdog, initialise files, 
  *  Find the Wakeup type. 
- *  
- * @return wkp. Indicates the wakeup type so the user will be able to change the specific logic.
  */
-int NodeFlow::start(){
+void NodeFlow::start(){
     uint16_t next_time=0;
     wdg.kick();
-    _init_rtc();
-    wkp=get_wakeup_type();
 
-    if (wkp==WAKEUP_PIN) {
+    TP_Sleep_Manager::WakeupType_t wkp = sleep_manager.get_wakeup_type();
+
+    if (wkp==TP_Sleep_Manager::WakeupType_t::WAKEUP_PIN) {
         pc.printf("\r\n--------------------PIN WAKEUP--------------------\r\n");
         //timetodate(time_now());
         HandleInterrupt();
         next_time=get_interrupt_latency();
         if (next_time>INTERRUPT_DELAY){
             set_wakeup_pin_flag(true);
-            standby(INTERRUPT_DELAY,false,false);
+            sleep_manager.standby(INTERRUPT_DELAY,false);
         }
          else{
-            standby(next_time,false,false);
+            sleep_manager.standby(next_time,false);
         }
     }
-    else if (wkp==WAKEUP_TIMER) {
+    else if (wkp==TP_Sleep_Manager::WakeupType_t::WAKEUP_TIMER) {
         if(delay_pin_wakeup()==FLAG_WAKEUP_PIN){
             set_wakeup_pin_flag(false);
             next_time=get_interrupt_latency();
@@ -279,7 +277,7 @@ int NodeFlow::start(){
         }
          
     }
-    else if (wkp==WAKEUP_RESET) {
+    else if (wkp==TP_Sleep_Manager::WakeupType_t::WAKEUP_RESET) {
         pc.printf("\r\n                      __|__       \n               --@--@--(_)--@--@--\n-------------------THING PILOT--------------------\r\n");
         pc.printf("\nDevice Unique ID: %08X %08X %08X \r", STM32_UID[0], STM32_UID[1], STM32_UID[2]);
         initialise();
@@ -312,8 +310,7 @@ int NodeFlow::start(){
         next_time=set_scheduler();      
     }
     pc.printf("\nGoing to sleep for %d",next_time);
-    standby(next_time,true,true);  
-    return wkp;
+    sleep_manager.standby(next_time,true);  
 }
 
 int NodeFlow::HandleModem(){
@@ -971,64 +968,6 @@ uint64_t NodeFlow::receiveTTN(){
     return decValue;
 }
 #endif
-RTC_HandleTypeDef RtcHandle;
-/**Standby
- */
-void NodeFlow::_init_rtc() {
-   PlatformMutex *mtx = new PlatformMutex;
-   mtx->lock();
-   rtc_init();
-   mtx->unlock();
-   delete(mtx);
-}
-void NodeFlow::SystemPower_Config() {
-   HAL_Init();
-   GPIO_InitTypeDef GPIO_InitStructure;
-   __HAL_RCC_PWR_CLK_ENABLE();
-   HAL_PWREx_EnableUltraLowPower();
-   HAL_PWREx_EnableFastWakeUp();
-   __HAL_RCC_WAKEUPSTOP_CLK_CONFIG(RCC_STOP_WAKEUPCLOCK_MSI);
-   __HAL_RCC_GPIOA_CLK_ENABLE();
-   __HAL_RCC_GPIOB_CLK_ENABLE();
-   __HAL_RCC_GPIOC_CLK_ENABLE();
-   __HAL_RCC_GPIOD_CLK_ENABLE();
-   __HAL_RCC_GPIOH_CLK_ENABLE();
-   __HAL_RCC_GPIOE_CLK_ENABLE();
-   GPIO_InitStructure.Pin = GPIO_PIN_All;
-   GPIO_InitStructure.Mode = GPIO_MODE_ANALOG;
-   GPIO_InitStructure.Pull = GPIO_NOPULL;
-   HAL_GPIO_Init(GPIOA, &GPIO_InitStructure);
-   HAL_GPIO_Init(GPIOB, &GPIO_InitStructure);
-   HAL_GPIO_Init(GPIOC, &GPIO_InitStructure);
-   HAL_GPIO_Init(GPIOD, &GPIO_InitStructure);
-   HAL_GPIO_Init(GPIOH, &GPIO_InitStructure);
-   HAL_GPIO_Init(GPIOE, &GPIO_InitStructure);
-   __HAL_RCC_GPIOA_CLK_DISABLE();
-   __HAL_RCC_GPIOB_CLK_DISABLE();
-   __HAL_RCC_GPIOC_CLK_DISABLE();
-   __HAL_RCC_GPIOD_CLK_DISABLE();
-   __HAL_RCC_GPIOH_CLK_DISABLE();
-   __HAL_RCC_GPIOE_CLK_DISABLE();
-}
-
-
- void NodeFlow::rtc_set_wake_up_timer_s(uint32_t delta) {
-   uint32_t clock = RTC_WAKEUPCLOCK_CK_SPRE_16BITS;
-   // HAL_RTCEx_SetWakeUpTimer_IT will assert that delta is 0xFFFF at max
-   if (delta > 0xFFFF) {
-       delta -= 0x10000;
-       clock = RTC_WAKEUPCLOCK_CK_SPRE_17BITS;
-   }
-   RtcHandle.Instance = RTC;
-   HAL_StatusTypeDef status = HAL_RTCEx_SetWakeUpTimer_IT(&RtcHandle, delta, clock);
-   if (status != HAL_OK) {
-       NVIC_SystemReset();
-    }
-}
-void NodeFlow::clear_uc_wakeup_flags() {
-   __HAL_RCC_CLEAR_RESET_FLAGS();
-   SET_BIT(PWR->CR, PWR_CR_CWUF);
-}
 
 
 int NodeFlow::get_flags(){    
@@ -1063,70 +1002,6 @@ int NodeFlow::delay_pin_wakeup(){
      }
      return 0;
 }
-
-int NodeFlow::get_wakeup_type(){
- if(__HAL_RCC_GET_FLAG(RCC_FLAG_PINRST)) {
-       return WAKEUP_RESET;
-   }
-   if(READ_BIT(RTC->ISR, RTC_ISR_WUTF)) {
-       return WAKEUP_TIMER;
-   }
-   if(READ_BIT(PWR->CSR, PWR_CSR_WUF)) {
-       return WAKEUP_PIN;
-   }
-
-   if (__HAL_RCC_GET_FLAG(RCC_FLAG_SFTRST)) {
-       return WAKEUP_SOFTWARE;
-   }
-
-    if (__HAL_RCC_GET_FLAG(RCC_FLAG_LPWRRST)) {
-       return WAKEUP_LOWPOWER;
-   }
-   return WAKEUP_UNKNOWN;
-    
-}
-
-
-void NodeFlow::standby(int seconds, bool wkup_one, bool wkup_two) { 
-   if (seconds<2){
-       seconds=2;
-   } 
-   if (seconds>6600){
-       seconds=6600;
-       set_flags_config(true, false, false);
-   }
-  #ifdef TARGET_TP_EARHART_V1_0_0
-   int retcode=lpwan.sleep();
-   #endif
-   //Without this delay it breaks..?!
-   ThisThread::sleep_for(2);
-   SystemPower_Config();
-   core_util_critical_section_enter();
-   clear_uc_wakeup_flags();
-   // Enable wakeup timer.
-   rtc_set_wake_up_timer_s(seconds);
-   if(wkup_one) {
-       HAL_PWR_EnableWakeUpPin(PWR_WAKEUP_PIN1);
-   }
-   else {
-       HAL_PWR_DisableWakeUpPin(PWR_WAKEUP_PIN1);
-   }
-//    if(wkup_two) {
-//        HAL_PWR_DisableWakeUpPin(PWR_WAKEUP_PIN1);
-//    }
-//    else {
-//        HAL_PWR_DisableWakeUpPin(PWR_WAKEUP_PIN2);
-//    }
-   HAL_PWR_EnterSTANDBYMode();
-   // this should not happen...
-   //rtc_deactivate_wake_up_timer();
-   core_util_critical_section_exit();
-   // something went wrong, let's reset
-   NVIC_SystemReset();
-}
-
-
-
 
 
 

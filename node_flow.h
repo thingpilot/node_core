@@ -16,6 +16,7 @@
 #include "TPL5010.h"
 #include "rtos.h"
 #include <cmath>
+#include "tp_sleep_manager.h"
 
 #define XSTR(x) STR(x)
 #define STR(x) #x
@@ -46,17 +47,6 @@
 #define DAYINSEC                    86400
 #define HOURINSEC                   3600
 #define MINUTEINSEC                 60
-
-/** WakeupType enum, possible ways to wake up from sleep.
- */
-enum WakeupType {
-                    WAKEUP_RESET    ,
-                    WAKEUP_TIMER    ,
-                    WAKEUP_PIN      ,
-                    WAKEUP_SOFTWARE ,
-                    WAKEUP_LOWPOWER ,
-                    WAKEUP_UNKNOWN  
-};
 
 enum Flags {
                     FLAG_WDG,
@@ -127,7 +117,7 @@ public:
     int HandleModem();
     /** Initialise device.
      */
-    int start();
+    void start();
 
     /** Add sensors ids
      *  
@@ -138,16 +128,6 @@ public:
      *
      */
     int add_sensors(); //uint8_t device_sn[],uint16_t reading_time[],size_t number_of_sensors
-    
-    /**Sets the device in standby mode.
-     *  
-     *  @param seconds                     Seconds until next wakeup
-     *
-     *  @param wkup_one
-     *  
-     *
-     */
-     void standby(int seconds, bool wkup_one, bool wkup_two);
 
     /** Reading sensors periodically, handles each sensor differently?!
     *
@@ -214,11 +194,6 @@ public:
     /** Wakeup/time 
      */
     int initialise(); 
-    void _init_rtc();
-    void SystemPower_Config();
-    static void rtc_set_wake_up_timer_s(uint32_t delta);
-    void clear_uc_wakeup_flags();
-    static int get_wakeup_type();
     uint8_t get_timestamp();
     uint32_t time_now();
     uint8_t timetodate(uint32_t remainder_time);
@@ -271,6 +246,8 @@ public:
     /**Handle Interrupt */
     uint16_t get_interrupt_latency();
     int ovewrite_wakeup_timestamp(uint16_t time_remainder);
+
+    TP_Sleep_Manager sleep_manager;
 
     #if BOARD == WRIGHT_V1_0_0
         TP_NBIoT_Interface _radio;
