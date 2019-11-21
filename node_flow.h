@@ -69,6 +69,7 @@ class NodeFlow: public DataManager
             UNDEFINED = 10
         };
         
+        /** CONSTRUCTORS *********************************************************************************************/
         #if BOARD == EARHART_V1_0_0
         /** Constructor. Create a NodeFlow interface, connected to the pins specified 
          *  operating at the specified frequency
@@ -86,10 +87,13 @@ class NodeFlow: public DataManager
                 PinName txu=TP_NBIOT_TXU, PinName rxu=TP_NBIOT_RXU, PinName cts=TP_NBIOT_CTS, PinName rst=TP_NBIOT_RST, 
                 PinName vint=TP_NBIOT_VINT, PinName gpio=TP_NBIOT_GPIO, int baud=TP_NBIOT_BAUD, PinName done=TP_DONE);
         #endif /* #if BOARD == WRIGHT_V1_0_0 */
+        /** CONSTRUCTORS END *****************************************************************************************/
 
+        /** NodeFlow destructor 
+         */
         ~NodeFlow();
 
-        /** Virtual functions START *****************************************************************************
+        /** VIRTUAL FUNCTIONS *****************************************************************************************
          *  Virtual functions MUST be overridden by the application developer. The description of these functions 
          *  is given above each virtual definition
          */
@@ -110,16 +114,7 @@ class NodeFlow: public DataManager
          *  to interact with the sensors. This is where that code should be
          */  
         virtual uint8_t* HandlePeriodic(uint16_t &length) = 0; //uint8_t payload[], uint16_t &length
-        /** Virtual functions END ********************************************************************************/ 
-         
-
-        /** Attempt to connect to NB-IoT network with default parameters
-         *  described in tp_nbiot_interface.h. The function blocks and will
-         *  time out after 5 minutes at which point the NB-IoT modem will 
-         *  regress to minimum functionality in order to conserve power whilst
-         *  the application decides what to do
-         */
-        int initialise_nbiot();
+        /** Virtual functions END ************************************************************************************/ 
 
         int getPlatform();
         int HandleModem();
@@ -151,9 +146,9 @@ class NodeFlow: public DataManager
          */        
         int set_scheduler();
 
-        #ifdef TARGET_TP_EARHART_V1_0_0
-        /** LORAWAN
-         */
+        /** LORAWAN **************************************************************************************************/
+        #if BOARD == EARHART_V1_0_0
+
         /** Join the LPWAN- TTN network either with ABP or OTAA. 
          *  You must call this before using the send/receive.
          *
@@ -181,7 +176,23 @@ class NodeFlow: public DataManager
         int sendTTN(uint8_t port, uint8_t payload[], uint16_t length);
         
         uint64_t receiveTTN();
-        #endif
+
+        #endif /* #if BOARD == EARHART_V1_0_0 */
+        /** LORAWAN END **********************************************************************************************/
+
+        /** NB-IoT ***************************************************************************************************/
+        #if BOARD == WRIGHT_V1_0_0
+        /** Attempt to connect to NB-IoT network with default parameters
+         *  described in tp_nbiot_interface.h. The function blocks and will
+         *  time out after 5 minutes at which point the NB-IoT modem will 
+         *  regress to minimum functionality in order to conserve power whilst
+         *  the application decides what to do
+         */
+        int initialise_nbiot();
+
+        #endif /* #if BOARD == WRIGHT_V1_0_0 */
+        /** NB-IoT ***************************************************************************************************/
+
     //private:
         
         /** Wakeup/time 
@@ -238,12 +249,28 @@ class NodeFlow: public DataManager
         uint16_t get_interrupt_latency();
         int ovewrite_wakeup_timestamp(uint16_t time_remainder);
 
+        /** Manage device sleep times before calling sleep_manager.standby().
+         *  Ensure that the maximum time the device can sleep for is 6600 seconds,
+         *  this is due to the watchdog timer timeout, set at 7200 seconds
+         *
+         * @param seconds Number of seconds to sleep for 
+         * @param wkup_one If true the device will respond to rising edge interrupts
+         *                 on WKUP_PIN1
+         * @return None 
+         */
         void enter_standby(int seconds, bool wkup_one);
 
+        /** Instance of TPL5010 watchdog timer 
+         */
         TPL5010 watchdog;
 
+        /** Instance of TP_Sleep_Manager to handle LL deepsleep setup 
+         */
         TP_Sleep_Manager sleep_manager;
 
+        /** Conditionally instantiate _radio object and _comms_stack
+         *  dependent on target board
+         */
         #if BOARD == WRIGHT_V1_0_0
             TP_NBIoT_Interface _radio;
             Comms_Radio_Stack _comms_stack = Comms_Radio_Stack::NBIOT;
