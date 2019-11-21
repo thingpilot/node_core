@@ -244,26 +244,34 @@ void NodeFlow::start(){
 
     TP_Sleep_Manager::WakeupType_t wkp = sleep_manager.get_wakeup_type();
 
-    if (wkp==TP_Sleep_Manager::WakeupType_t::WAKEUP_PIN) {
+    if(wkp==TP_Sleep_Manager::WakeupType_t::WAKEUP_PIN)
+    {
         pc.printf("\r\n--------------------PIN WAKEUP--------------------\r\n");
+        
         //timetodate(time_now());
         HandleInterrupt();
         next_time=get_interrupt_latency();
-        if (next_time>INTERRUPT_DELAY){
+
+        if(next_time>INTERRUPT_DELAY)
+        {
             set_wakeup_pin_flag(true);
             enter_standby(INTERRUPT_DELAY,false);
         }
-         else{
+        else
+        {
             enter_standby(next_time,false);
         }
     }
-    else if (wkp==TP_Sleep_Manager::WakeupType_t::WAKEUP_TIMER) {
-        if(delay_pin_wakeup()==NodeFlow::FLAG_WAKEUP_PIN){
+    else if(wkp==TP_Sleep_Manager::WakeupType_t::WAKEUP_TIMER) 
+    {
+        if(delay_pin_wakeup()==NodeFlow::FLAG_WAKEUP_PIN)
+        {
             set_wakeup_pin_flag(false);
             next_time=get_interrupt_latency();
         }
-        else{
-         pc.printf("\r\n-------------------TIMER WAKEUP-------------------\r\n");
+        else
+        {
+            pc.printf("\r\n-------------------TIMER WAKEUP-------------------\r\n");
             timetodate(time_now());
             HandleModem();
             flags=get_flags();
@@ -271,7 +279,8 @@ void NodeFlow::start(){
         }
          
     }
-    else if (wkp==TP_Sleep_Manager::WakeupType_t::WAKEUP_RESET) {
+    else if(wkp==TP_Sleep_Manager::WakeupType_t::WAKEUP_RESET) 
+    {
         pc.printf("\r\n                      __|__       \n               --@--@--(_)--@--@--\n-------------------THING PILOT--------------------\r\n");
         pc.printf("\nDevice Unique ID: %08X %08X %08X \r", STM32_UID[0], STM32_UID[1], STM32_UID[2]);
         initialise();
@@ -281,43 +290,56 @@ void NodeFlow::start(){
     
         overwrite_sched_config(SCHEDULER,SCHEDULER_SIZE);
         
-        if (read_sched_config(0)==true){
-            for (int i=0; i<SCHEDULER_SIZE; i++){
+        if(read_sched_config(0)==true)
+        {
+            for(int i=0; i<SCHEDULER_SIZE; i++)
+            {
                 uint16_t time_remainder=DIVIDE(((int(scheduler[i]))*HOURINSEC)+((fmod(scheduler[i],1))*6000)); 
                 timetodate(time_remainder*2);
                 append_sched_config(time_remainder);
             }
         }
-        else{
-            if (SCHEDULER_SIZE==1){
+        else
+        {
+            if(SCHEDULER_SIZE==1)
+            {
                 append_sched_config(periodic[0]);
             }
             //Each sensor has a different time
-            else{
+            else
+            {
                 time_config_init();
                 add_sensors();
-                for (int i=0; i<SCHEDULER_SIZE; i++){ 
-                    append_sched_config(periodic[i]); }
+
+                for(int i=0; i<SCHEDULER_SIZE; i++)
+                { 
+                    append_sched_config(periodic[i]); 
+                }
             }
         }
+
         flags=get_flags();
         next_time=set_scheduler();      
     }
+
     pc.printf("\nGoing to sleep for %d",next_time);
     enter_standby(next_time,true);  
 }
 
-int NodeFlow::HandleModem(){
+int NodeFlow::HandleModem()
+{
     uint16_t length=0;
     uint8_t *payload=0;
     payload=HandlePeriodic(length);
-#if BOARD == EARHART_V1_0_0
-        sendTTN(1, payload, length);            
-        receiveTTN();
-#endif /* #if BOARD == EARHART_V1_0_0 */
 
-  return 0;
+    #if BOARD == EARHART_V1_0_0
+            sendTTN(1, payload, length);            
+            receiveTTN();
+    #endif /* #if BOARD == EARHART_V1_0_0 */
+
+    return 0;
 }
+
 /** Initialise the EEPROM
  * @return Status
  */
