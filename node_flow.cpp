@@ -810,81 +810,102 @@ int NodeFlow::set_scheduler()
     return timediff_temp;   
 }
 
-int NodeFlow::set_reading_time(){ 
+int NodeFlow::set_reading_time()
+{ 
     TempSensorConfig ts_conf;
     TimeConfig t_conf;
     TempConfig tm_conf;
     SensorConfig s_conf;
 
-    status=DataManager::read_file_entry(TimeConfig_n, 0, t_conf.data,sizeof(t_conf.parameters));
-    if (status!=0){
+    status = DataManager::read_file_entry(TimeConfig_n, 0, t_conf.data,sizeof(t_conf.parameters));
+    if(status != 0)
+    {
         pc.printf("Error read_file_entry TimeConfig. status: %i\r\n", status);
+        /* TODO: What is 2? */
         return 2;
     }
+
     int time_comparator=t_conf.parameters.time_comparator; 
 
-    if (time_comparator==0){
+    if(time_comparator == 0)
+    {
         DataManager_FileSystem::File_t TempConfig_File_t;
         TempConfig_File_t.parameters.filename = TempConfig_n;
         TempConfig_File_t.parameters.length_bytes = sizeof(TempConfig::parameters);
+
         status = DataManager::add_file(TempConfig_File_t, SCHEDULER_SIZE);
-    if (status!=0){
+        if(status != 0)
+        {
             pc.printf("Add file error. status: %i\r\n", status);
             return status;
-         }
+        }
     }
+
     pc.printf("\r\nTime comparator equals %d (should be zero at first)\r\n",time_comparator);
-    status=DataManager::read_file_entry(TempSensorConfig_n, 0, ts_conf.data, sizeof(ts_conf.parameters));
-    if (status!=0){
+
+    status = DataManager::read_file_entry(TempSensorConfig_n, 0, ts_conf.data, sizeof(ts_conf.parameters));
+    if(status != 0)
+    {
         pc.printf("Error read_file_entry Temporary Config. status: %i\r\n", status);
         return status;
     }
+
     int temp=ts_conf.parameters.time_comparator; //time_left for first sensor
     
-    for (int i=0; i<SCHEDULER_SIZE; i++){
-
+    for (int i=0; i<SCHEDULER_SIZE; i++)
+    {
         status=DataManager::read_file_entry(TempSensorConfig_n, i, ts_conf.data, sizeof(ts_conf.parameters));
-        if (status!=0){
+        if(status != 0)
+        {
             pc.printf("Error read_file_entry Temporary Config. status: %i\r\n", status);
             return status;
-         }
+        }
+
         int dev_id=ts_conf.parameters.device_id;
         int time_comparator_now= ts_conf.parameters.time_comparator;//(temp1);//-time_comparator;
 
-        if (temp>=time_comparator_now && time_comparator_now!=0){
+        if (temp >= time_comparator_now && time_comparator_now != 0)
+        {
             temp=time_comparator_now;      
-            }
-        } 
-     time_comparator=temp;
+        }
+    }
+
+    time_comparator=temp;
    
     status=set_time_config(time_comparator);
      
-    for (int i=0; i<SCHEDULER_SIZE; i++){
-
+    for(int i=0; i<SCHEDULER_SIZE; i++)
+    {
         status=DataManager::read_file_entry(TempSensorConfig_n, i, ts_conf.data, sizeof(ts_conf.parameters));
-        if (status!=0){
+        if(status != 0)
+        {
             pc.printf("Error read temporary time sensor config. status: %i\r\n", status);
             return status;
-         }
+        }
         
+        /** TODO: Creating two new ints, can we just directly assign tm_conf.device/time_comparator? */
         int dev_id=ts_conf.parameters.device_id;
         int time_comp= ts_conf.parameters.time_comparator-time_comparator;
-        
         tm_conf.parameters.device_id=dev_id;
         tm_conf.parameters.time_comparator=time_comp;
-        if (time_comp==0){
-            status=DataManager::read_file_entry(SensorConfig_n, i, s_conf.data, sizeof(s_conf.parameters));
-            if (status!=0){
-            pc.printf("Error read sensor config. status: %i\r\n", status);
-            return status;
-             }
-            tm_conf.parameters.time_comparator=s_conf.parameters.time_comparator;
 
+        if(time_comp == 0)
+        {
+            status=DataManager::read_file_entry(SensorConfig_n, i, s_conf.data, sizeof(s_conf.parameters));
+            if(status != 0)
+            {
+                pc.printf("Error read sensor config. status: %i\r\n", status);
+                return status;
+            }
+
+            tm_conf.parameters.time_comparator=s_conf.parameters.time_comparator;
         }
-       //i can't overwrite while reading the pointer is setting me at the first so i created a temporary config 
-        if(i==0){
+
+        /** TODO: Indentation */
+        //i can't overwrite while reading the pointer is setting me at the first so i created a temporary config 
+        if(i == 0)
+        {
         status=DataManager::overwrite_file_entries(TempConfig_n, tm_conf.data, sizeof(tm_conf.parameters));  
-         
         }
         else{
         status=DataManager::append_file_entry(TempConfig_n, tm_conf.data, sizeof(tm_conf.parameters));
@@ -894,6 +915,8 @@ int NodeFlow::set_reading_time(){
             return status;
              }
     }
+
+    /** TODO: Indentation */
     for (int i=0; i<SCHEDULER_SIZE; i++){
     status=DataManager::read_file_entry(TempConfig_n, i, tm_conf.data, sizeof(tm_conf.parameters));
     if (status!=0){
