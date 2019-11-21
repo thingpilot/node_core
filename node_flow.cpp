@@ -15,10 +15,6 @@
  */
 Serial pc(TP_PC_TXU, TP_PC_RXU);
 
-/**Use the watchdog 
- */
-TPL5010 wdg(TP_DONE); //PA_5 for earhart
-
 #ifdef TARGET_TP_EARHART_V1_0_0
 LorawanTP lpwan; 
 #endif
@@ -36,8 +32,10 @@ int status = 1;
  * @param scl I2C clock line pin
  * @param frequency_hz The bus frequency in hertz. */
 #if BOARD == EARHART_V1_0_0
-NodeFlow::NodeFlow(PinName write_control, PinName sda, PinName scl, int frequency_hz): 
-DataManager(write_control, sda, scl, frequency_hz) {
+NodeFlow::NodeFlow(PinName write_control, PinName sda, PinName scl, int frequency_hz, PinName done): 
+DataManager(write_control, sda, scl, frequency_hz), watchdog(done) 
+{
+
 }
 #endif /* #if BOARD == EARHART_V1_0_0 */
 
@@ -45,7 +43,7 @@ DataManager(write_control, sda, scl, frequency_hz) {
 NodeFlow::NodeFlow(PinName write_control, PinName sda, PinName scl, int frequency_hz,
                    PinName txu, PinName rxu, PinName cts, PinName rst, 
                    PinName vint, PinName gpio, int baud, PinName done) :
-                   DataManager(write_control, sda, scl, frequency_hz), _radio(txu, rxu, cts, rst, vint, gpio, baud)
+                   DataManager(write_control, sda, scl, frequency_hz), _radio(txu, rxu, cts, rst, vint, gpio, baud), watchdog(done)
 {
 
 }
@@ -246,7 +244,7 @@ int NodeFlow::initialise_nbiot()
  */
 void NodeFlow::start(){
     uint16_t next_time=0;
-    wdg.kick();
+    watchdog.kick();
 
     TP_Sleep_Manager::WakeupType_t wkp = sleep_manager.get_wakeup_type();
 
