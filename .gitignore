@@ -4,3 +4,6 @@ thingpilot_semtech_lora
 mbed-semtech-lora-rf-drivers
 node_core_data_manager
 stm24256_eeprom_driver
+thingpilot_nbiot
+sara_n2_driver
+tp_sleep_manager
