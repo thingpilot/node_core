@@ -20,16 +20,18 @@
 #if BOARD == EARHART_V1_0_0
     #pragma message "TARGET = EARHART"
     #include "LorawanTP.h"
+    #define MODULATION 0
 #elif BOARD == WRIGHT_V1_0_0
     #pragma message "TARGET = WRIGHT"
+    #define MODULATION 1
 #else
     #pragma message "TARGET UNKNOWN"
+     #define MODULATION 2
 #endif
 
 //#include "board.h"
 #define size(x)  (sizeof(x) / sizeof((x)[0]))
 #define DIVIDE(x) (x)/2
-
 
 /**Time related defines */
 #define DAYINSEC                    86400
@@ -83,7 +85,7 @@ public:
     int HandleModem();
     /** Initialise device.
      */
-    int start();
+    void start();
 
     /** Add sensors ids
      *  
@@ -185,7 +187,7 @@ public:
      */
      /** Read global stats
      */
-    int get_global_stats();
+    void get_global_stats();
 
     /** Let's see all of our newly created file's parameters
      */
@@ -210,7 +212,6 @@ public:
     uint16_t read_clock_synch_config(bool &clockSynchOn);
     
     /**Initialisation for all config files */
-    int config_init();
     int time_config_init();
     
     int sensor_config_init(int length);
@@ -227,6 +228,16 @@ public:
     /**Handle Interrupt */
     uint16_t get_interrupt_latency();
     int ovewrite_wakeup_timestamp(uint16_t time_remainder);
+
+/**Critical errors that the device will need to reset if happens */
+    enum
+    {   NODEFLOW_OK             =  0,
+        DATA_MANAGER_FAIL       = -1,
+        LORAWAN_TP_FAILED       = -2,
+        NBIOT_TP_FAILED         = -3,
+        EEPROM_DRIVER_FAILED    = -4,
+
+    };
 };
 
 
