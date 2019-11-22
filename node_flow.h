@@ -46,10 +46,10 @@ class NodeFlow: public DataManager
 
         /** Enumerated list of NodeFlow error codes
          */
-        enum 
-        {
-            NODEFLOW_OK = 0
-        };
+        // enum 
+        // {
+        //     NODEFLOW_OK = 0
+        // };
 
         /** Enumerated list of flags 
          */
@@ -205,11 +205,6 @@ class NodeFlow: public DataManager
         uint32_t time_now();
         uint8_t timetodate(uint32_t remainder_time);
 
-        /** EEPROM
-         */
-        /** Read global stats
-         */
-        int get_global_stats();
 
         /** Let's see all of our newly created file's parameters
          */
