@@ -12,7 +12,6 @@
  */
 #include "config_device.h"
 #include "DataManager.h"
-#include "rtc_api_hal.h"
 #include "TPL5010.h"
 #include "rtos.h"
 #include <cmath>
@@ -25,7 +24,6 @@
     #include "tp_nbiot_interface.h"
     #define MODULATION 1
 #else
-    #pragma message "TARGET UNKNOWN"
      #define MODULATION 2
 #endif
 
