@@ -53,12 +53,16 @@ class NodeFlow: public DataManager
          */
         enum Flags 
         {
-            FLAG_WDG         = 0,
-            FLAG_SENSING     = 1,
-            FLAG_CLOCK_SYNCH = 2,
-            FLAG_SENDING     = 3,
-            FLAG_WAKEUP_PIN  = 4,
-            FLAG_UNKNOWN     = 5            
+            FLAG_WDG                = 0,
+            FLAG_SENSING            = 1,
+            FLAG_CLOCK_SYNCH        = 2,
+            FLAG_SENDING            = 3,
+            FLAG_WAKEUP_PIN         = 4,
+            FLAG_SENSE_SYNCH        = 5,
+            FLAG_SENSE_SEND         = 6,     
+            FLAG_SEND_SYNCH         = 7,
+            FLAG_SENSE_SEND_SYNCH   = 8,
+            FLAG_UNKNOWN            = 9, /**This flag should not happen*/          
         };
 
         /** Enumerated list of possible comms radio stacks
@@ -80,7 +84,10 @@ class NodeFlow: public DataManager
          * @param scl I2C clock line pin
          * @param frequency_hz The bus frequency in hertz. 
          */
-        NodeFlow(PinName write_control=TP_EEPROM_WC, PinName sda=TP_I2C_SDA, PinName scl=TP_I2C_SCL, int frequency_hz=TP_I2C_FREQ, PinName done=TP_DONE);
+        NodeFlow(PinName write_control=TP_EEPROM_WC, PinName sda=TP_I2C_SDA, PinName scl=TP_I2C_SCL, int frequency_hz=TP_I2C_FREQ, 
+                PinName mosi=TP_LORA_SPI_MOSI, PinName miso=TP_LORA_SPI_MISO, PinName sclk=TP_LORA_SPI_SCK, PinName nss=TP_LORA_SPI_NSS, PinName reset=TP_LORA_RESET,
+                PinName dio0=PB_4, PinName dio1=PB_1, PinName dio2=PB_0, PinName dio3=PC_13, PinName dio4=NC, PinName dio5=NC, PinName rf_switch_ctl1=NC, 
+                PinName rf_switch_ctl2=NC, PinName txctl=NC, PinName rxctl=NC, PinName ant_switch=NC, PinName pwr_amp_ctl=NC, PinName tcxo=TP_VDD_TCXO,PinName done=TP_DONE);
         #endif /* #if BOARD == EARHART_V1_0_0 */
 
         #if BOARD == WRIGHT_V1_0_0
@@ -226,8 +233,16 @@ class NodeFlow: public DataManager
         //int set_sched_config(int time_comparator);
         int overwrite_sched_config(uint16_t code,uint16_t length);
         int append_sched_config(uint16_t time_comparator);
-        int overwrite_clock_synch_config(int time_comparator, bool clockSynchOn);
+        int init_sched_config();
         uint16_t read_sched_config(int i);
+
+        int overwrite_send_sched_config(uint16_t code,uint16_t length);
+        int append_send_sched_config(uint16_t time_comparator);
+        int init_send_sched_config();
+        uint16_t read_send_sched_config(int i);
+
+        int overwrite_clock_synch_config(int time_comparator, bool clockSynchOn);
+        
         uint16_t read_clock_synch_config(bool &clockSynchOn);
         
         /** Initialisation for all config files 
@@ -238,13 +253,15 @@ class NodeFlow: public DataManager
         int sensor_config_init(int length);
         /** Set flags for the next wake up
          */
-        int set_flags_config(bool kick_wdg, bool sense_time, bool clock_synch);
+        int set_flags_config(bool kick_wdg, bool sense_time, bool clock_synch, bool send_time);
 
         int get_flags();
         int delay_pin_wakeup();
         int set_wakeup_pin_flag(bool wakeup_pin);
         int increment(int i);
         int read_increment();
+        void _clear_increment();
+        int _clear_after_send();
 
         /** Handle Interrupt 
          */
@@ -277,6 +294,7 @@ class NodeFlow: public DataManager
             TP_NBIoT_Interface _radio;
             Comms_Radio_Stack _comms_stack = Comms_Radio_Stack::NBIOT;
         #elif BOARD == EARHART_V1_0_0
+            LorawanTP lpwan;
             /* Instantiate LoRa _radio object here */
             Comms_Radio_Stack _comms_stack = Comms_Radio_Stack::LORA;
         #else 
