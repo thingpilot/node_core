@@ -3,3 +3,5 @@ BUILD
 node_core_data_manager
 stm24256_eeprom_driver
 tp_sleep_manager
+
+.gitmodules
