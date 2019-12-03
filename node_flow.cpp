@@ -17,6 +17,9 @@ Serial pc(TP_PC_TXU, TP_PC_RXU);
  */
 int flags=NodeFlow::FLAG_UNKNOWN;
 int status = 1;
+#if(SCHEDULER)
+float scheduler[1];
+#endif
 
 /** Constructor. Create a NodeFlow interface, connected to the pins specified 
  *  operating at the specified frequency
@@ -58,7 +61,7 @@ NodeFlow::NodeFlow(PinName write_control, PinName sda, PinName scl, int frequenc
  * @param DeviceConfig. Device specifics- send with the message payload.
  * @param SensorDataConfig. Each sensor will be able to store a specific amount of values (to be specified).
  * @param SchedulerConfig. Holds the scheduled times by the user.
- * @param SensorConfig. Each sensor is registered in the Sensor config file.
+ * @param SensingGroupConfig. Each sensor is registered in the Sensor config file.
  */
 union DeviceConfig
 {
@@ -93,11 +96,26 @@ union SchedulerConfig
     struct 
     {   
         uint16_t time_comparator; //first value holds status, second holds length of the array
+        uint8_t group_id;
         
     } parameters;
 
     char data[sizeof(SchedulerConfig::parameters)];
 };
+
+union MultiSchedulerConfig
+{
+    struct 
+    {   
+        uint16_t time_comparator; 
+        uint8_t group_id;
+        
+    } parameters;
+
+    char data[sizeof(MultiSchedulerConfig::parameters)];
+
+};
+
 /** The User can define MAX_BUFFER_READING_TIMES 
  */
 union SendSchedulerConfig
@@ -123,17 +141,15 @@ union ClockSynchConfig
     char data[sizeof(ClockSynchConfig::parameters)];
 };
 
-/** Program specific flags
+/** Program specific flags. Its every bit is a different flag. 0:SENSE, 1:SEND, 2:CLOCK, 3:KICK
  */
 union FlagsConfig
 {
     struct 
-    {    bool  sensing_time; //both sending&sensing time for lora
-         bool  clock_synch; 
-         bool  kick_wdg;
-         bool  sending_time; //only for NBIOT
-         bool  pin_wakeup;
-         bool  flag;   
+    {    
+        uint8_t ssck_flag;
+        bool  pin_wakeup;
+         
     } parameters;
 
     char data[sizeof(FlagsConfig::parameters)];
@@ -160,31 +176,43 @@ union IncrementConfig
     char data[sizeof(IncrementConfig::parameters)];
 };
 
-/** Sensor Config,TempSensorConfig, Time Config&&TempConfig be used in later version 
+/** Sensor Config,TempSensingGroupConfig, Time Config be used in later version 
  *  if the user wants to "register" each sensor for different reading times 
  */
-union SensorConfig
+union SensingGroupConfig
 {
     struct 
     {   
-        uint8_t device_id;
+        uint8_t group_id;
         uint16_t time_comparator; 
     } parameters;
 
-    char data[sizeof(SensorConfig::parameters)];
+    char data[sizeof(SensingGroupConfig::parameters)];
 };
 
-union TempSensorConfig
+union TempSensingGroupConfig
 {
     struct 
     {   
-        uint8_t  device_id;
+        uint8_t group_id;
         uint16_t time_comparator; 
     } parameters;
 
-    char data[sizeof(TempSensorConfig::parameters)];
+    char data[sizeof(TempSensingGroupConfig::parameters)];
 };
 
+/**TODO: Merge with ssck_flags group,Flags for each group */
+union MetricGroupConfig
+{
+    struct 
+    {
+        uint16_t metric_group_id;        
+        
+    } parameters;
+
+    char data[sizeof(MetricGroupConfig::parameters)];
+
+};
 /** Holds only the next sleeping time (time difference)
  */
 union TimeConfig
@@ -198,34 +226,25 @@ union TimeConfig
     char data[sizeof(TimeConfig::parameters)];
 };
 
-union TempConfig
-{
-    struct 
-    {   
-        uint8_t  device_id;
-        uint16_t time_comparator; 
-    } parameters;
 
-    char data[sizeof(TempConfig::parameters)];
-};
 
 
 /** Each filename in the eeprom hold a unique number
  */
 enum Filenames
 {
-    DeviceConfig_n          = 0,
-    SensorDataConfig_n      = 1, 
-    SchedulerConfig_n       = 2,
-    ClockSynchConfig_n      = 3,
-    FlagsConfig_n           = 4, //wdg,clock synch, sensing,sending
-    IncrementConfig_n       = 5,
-    SensorConfig_n          = 6, 
-    TimeConfig_n            = 7,
-    TempSensorConfig_n      = 8,
-    TempConfig_n            = 9,
-    NextTimeConfig_n        = 10,
-    SendSchedulerConfig_n   = 11
+    DeviceConfig_n              = 0,
+    SensorDataConfig_n          = 1, 
+    SchedulerConfig_n           = 2,
+    ClockSynchConfig_n          = 3,
+    FlagsConfig_n               = 4, 
+    IncrementConfig_n           = 5,
+    SensingGroupConfig_n        = 6, 
+    TimeConfig_n                = 7,
+    TempSensingGroupConfig_n    = 8,
+    NextTimeConfig_n            = 9,
+    SendSchedulerConfig_n       = 10,
+    MetricGroupConfig_n         = 11
  };
 
 #if BOARD == WRIGHT_V1_0_0
@@ -319,24 +338,68 @@ int NodeFlow::HandleModem()
 {
     uint16_t length=0;
     uint8_t *payload=0;
+
+    bool schedulerOn=read_sched_config(0); //true for scheduler with times
+    uint16_t sched_length=read_sched_config(1);
+
     if(flags==NodeFlow::FLAG_SENSING ||flags==NodeFlow::FLAG_SENSE_SEND||
         flags==NodeFlow::FLAG_SENSE_SEND_SYNCH||flags==NodeFlow::FLAG_SENSE_SYNCH)
     {
-        payload=HandlePeriodic(length);
-        /**TODO: NBIOT data handling */
-        #if BOARD == WRIGHT_V1_0_0
-        #endif
+        if (sched_length>1)
+        {
+            MetricGroupConfig mg_conf;
+            status=DataManager::read_file_entry(MetricGroupConfig_n, 0, mg_conf.data, sizeof(mg_conf.parameters));
+            pc.printf("Id: %d \r\n", mg_conf.parameters.metric_group_id);
+
+            bitset<8> flags(mg_conf.parameters.metric_group_id);
+            if(flags.test(0)==1)
+            {
+                payload=MetricGroupA(length);
+                #if BOARD == EARHART_V1_0_0
+                    sendTTN(1, payload, length);            
+                    receiveTTN();
+                #endif 
+            }
+            if(flags.test(1))
+            {
+                #if (SCHEDULER_B)
+                payload=MetricGroupB(length);
+                #endif
+            }
+            if(flags.test(2))
+            {   
+                #if (SCHEDULER_C)
+                payload=MetricGroupC(length);
+                #endif
+            }
+            if(flags.test(3))
+            {
+                #if (SCHEDULER_D)
+                payload=MetricGroupD(length);
+                #endif
+            }
+
+        }
+        else
+        {
+            #if BOARD == EARHART_V1_0_0
+                payload=MetricGroupA(length);
+                sendTTN(1, payload, length);            
+                receiveTTN();
+            #endif 
+           
+            #if BOARD == WRIGHT_V1_0_0
+                payload=MetricGroupA(length);
+                /**TODO: NBIOT data handling */
+
+            #endif
+        }   
+              
     }
 
     if(flags==NodeFlow::FLAG_SENDING||flags==NodeFlow::FLAG_SENSE_SEND||
         flags==NodeFlow::FLAG_SEND_SYNCH||flags==NodeFlow::FLAG_SENSE_SEND_SYNCH)
     { 
-        #if BOARD == EARHART_V1_0_0
-            payload=HandlePeriodic(length);
-            sendTTN(1, payload, length);            
-            receiveTTN();
-        #endif /* #if BOARD == EARHART_V1_0_0 */ 
-
         /**TODO: NBIOT send */
         #if BOARD == WRIGHT_V1_0_0
         #endif
@@ -467,7 +530,7 @@ int NodeFlow::config_init()
         return status;   
     }
 
-    status=set_flags_config(false, false, false,false);  //sensing true
+    status=set_flags_config(0);  //sensing true
 
     /** IncrementConfig
      */
@@ -503,16 +566,17 @@ int NodeFlow::config_init()
         return status;   
     }
 
-    DataManager_FileSystem::File_t TempConfig_File_t;
-    TempConfig_File_t.parameters.filename = TempConfig_n;
-    TempConfig_File_t.parameters.length_bytes = sizeof(TempConfig::parameters);
+    DataManager_FileSystem::File_t MetricGroupConfig_File_t;
+    MetricGroupConfig_File_t.parameters.filename = MetricGroupConfig_n;
+    MetricGroupConfig_File_t.parameters.length_bytes = sizeof(MetricGroupConfig::parameters);
 
-    status = DataManager::add_file(TempConfig_File_t, SCHEDULER_SIZE);
-    if(status != 0)
+    status = DataManager::add_file(MetricGroupConfig_File_t, 1);
+    if(status!=NODEFLOW_OK)
     {
-        pc.printf("Add file error. status: %i\r\n", status);
+        pc.printf("Metric file failed: %i\r\n", status);
         return status;
     }
+
 
 return DATA_MANAGER_OK;
 }
@@ -558,27 +622,38 @@ void NodeFlow::_clear_increment()
 
 int NodeFlow::sensor_config_init(int length)
 {
-    DataManager_FileSystem::File_t SensorConfig_File_t;
-    SensorConfig_File_t.parameters.filename = SensorConfig_n;
-    SensorConfig_File_t.parameters.length_bytes = sizeof(SensorConfig::parameters);
+    DataManager_FileSystem::File_t SensingGroupConfig_File_t;
+    SensingGroupConfig_File_t.parameters.filename = SensingGroupConfig_n;
+    SensingGroupConfig_File_t.parameters.length_bytes = sizeof(SensingGroupConfig::parameters);
 
-    status=DataManager::add_file(SensorConfig_File_t, length);
+    status=DataManager::add_file(SensingGroupConfig_File_t, length);
     if (status!=NODEFLOW_OK) 
     {
         pc.printf("Add file failed: %i\r\n", status);
         return status; 
     }
     
-    DataManager_FileSystem::File_t TempSensorConfig_File_t;
-    TempSensorConfig_File_t.parameters.filename = TempSensorConfig_n;
-    TempSensorConfig_File_t.parameters.length_bytes = sizeof(TempSensorConfig::parameters);
+    DataManager_FileSystem::File_t TempSensingGroupConfig_File_t;
+    TempSensingGroupConfig_File_t.parameters.filename = TempSensingGroupConfig_n;
+    TempSensingGroupConfig_File_t.parameters.length_bytes = sizeof(TempSensingGroupConfig::parameters);
 
-    status = DataManager::add_file(TempSensorConfig_File_t, length);
+    status = DataManager::add_file(TempSensingGroupConfig_File_t, length);
     if(status!=NODEFLOW_OK)
     {
         pc.printf("Add file failed: %i\r\n", status);
         return status;
     }
+
+    // DataManager_FileSystem::File_t MetricGroupConfig_File_t;
+    // MetricGroupConfig_File_t.parameters.filename = MetricGroupConfig_n;
+    // MetricGroupConfig_File_t.parameters.length_bytes = sizeof(MetricGroupConfig::parameters);
+
+    // status = DataManager::add_file(MetricGroupConfig_File_t, 1);
+    // if(status!=NODEFLOW_OK)
+    // {
+    //     pc.printf("Metric file failed: %i\r\n", status);
+    //     return status;
+    // }
 
     return DATA_MANAGER_OK;   
 }
@@ -630,33 +705,68 @@ int NodeFlow::set_time_config(int time_comparator)
  */ 
 int NodeFlow::init_sched_config()
 {
-    
+    uint16_t time_remainder=0;
     overwrite_sched_config(SCHEDULER,SCHEDULER_SIZE);
     if(read_sched_config(0))
-    {
-        pc.printf("\r\nScheduled sensing times: \n");
-        for(int i=0; i<SCHEDULER_SIZE; i++)
-        {
-            uint16_t time_remainder=DIVIDE(((int(scheduler[i]))*HOURINSEC)+((fmod(scheduler[i],1))*6000)); 
-            append_sched_config(time_remainder);
-            timetodate(time_remainder*2);
-        }
-    }
+    {   
+        #if (SCHEDULER_A)
+            pc.printf("\r\n---------------ADD SENSING TIMES GA---------------\r\n");
+            for(int i=0; i<SCHEDULER_A_SIZE; i++)
+            {
+                time_remainder=DIVIDE(((int(schedulerA[i]))*HOURINSEC)+((fmod(schedulerA[i],1))*6000));
+                append_sched_config(time_remainder,1); //group_id dec for 0001
+                timetodate(time_remainder*2);
+
+            }
+        #endif     
+        #if (SCHEDULER_B)
+            pc.printf("\r\n---------------ADD SENSING TIMES GB---------------\r\n");        // {
+            for(int i=0; i<SCHEDULER_B_SIZE; i++)
+            {
+                time_remainder=DIVIDE(((int(schedulerB[i]))*HOURINSEC)+((fmod(schedulerB[i],1))*6000));
+                append_sched_config(time_remainder,2); //group_id dec for 0010
+                timetodate(time_remainder*2);
+            }
+        #endif
+        #if (SCHEDULER_C)
+            pc.printf("\r\n---------------ADD SENSING TIMES GC---------------\r\n");        // {
+            for(int i=0; i<SCHEDULER_C_SIZE; i++)
+            {
+                time_remainder=DIVIDE(((int(schedulerC[i]))*HOURINSEC)+((fmod(schedulerC[i],1))*6000));
+                append_sched_config(time_remainder,4); //group_id dec for 0100
+                timetodate(time_remainder*2);
+            }
+        #endif
+
+        #if (SCHEDULER_D)
+            pc.printf("\r\n--------------ADD SENSING TIMES GD---------------\r\n");        // {
+            for(int i=0; i<SCHEDULER_D_SIZE; i++)
+            {
+                time_remainder=DIVIDE(((int(schedulerD[i]))*HOURINSEC)+((fmod(schedulerD[i],1))*6000));
+                append_sched_config(time_remainder,8); ////group_id dec for 1000
+                timetodate(time_remainder*2);
+            }
+        #endif
+    }   
     else
     {
-        if(read_sched_config(1))
+        if(read_sched_config(1)==1)
         {
-            append_sched_config(scheduler[0]);
+            #if (!SCHEDULER)
+            append_sched_config(scheduler[0],0);
+            #endif
         }
         /**Each sensor has a different time case. TODO: NOT YET FULLY IMPLEMENTED */
         else
         {
             time_config_init();
-            add_sensors();
+            add_sensing_groups();
 
             for(int i=0; i<SCHEDULER_SIZE; i++)
             { 
-                append_sched_config(scheduler[i]); 
+                #if (!SCHEDULER)
+                append_sched_config(scheduler[i],0);
+                #endif
             }
         }
     }
@@ -666,11 +776,10 @@ return NODEFLOW_OK;
 int NodeFlow::overwrite_sched_config(uint16_t code,uint16_t length)
 {
     SchedulerConfig s_conf;
-    //code,length,values
     s_conf.parameters.time_comparator=code;
 
     status= DataManager::overwrite_file_entries(SchedulerConfig_n, s_conf.data, sizeof(s_conf.parameters));
-    if(status != 0)
+    if(status != NODEFLOW_OK)
     {
         pc.printf("WHYY Scheduler Config failed to overwrite: %i\r\n", status);
     }
@@ -679,7 +788,7 @@ int NodeFlow::overwrite_sched_config(uint16_t code,uint16_t length)
 
     status = DataManager::append_file_entry(SchedulerConfig_n, s_conf.data, sizeof(s_conf.parameters));
     
-    if(status != 0)
+    if(status != NODEFLOW_OK)
     {
         pc.printf("Scheduler Config failed to append: %i\r\n", status);
     }
@@ -687,15 +796,14 @@ int NodeFlow::overwrite_sched_config(uint16_t code,uint16_t length)
     return status;
 }
 
-
-
-int NodeFlow::append_sched_config(uint16_t time_comparator)
+int NodeFlow::append_sched_config(uint16_t time_comparator,uint8_t group_id)
 {
     SchedulerConfig t_conf;
     t_conf.parameters.time_comparator=time_comparator;
+    t_conf.parameters.group_id=group_id;
 
     status= DataManager::append_file_entry(SchedulerConfig_n, t_conf.data, sizeof(t_conf.parameters));
-    if(status != 0)
+    if(status != NODEFLOW_OK)
     {
         pc.printf("Scheduler Config failed to append: %i\r\n", status);
     }
@@ -708,7 +816,7 @@ int NodeFlow::append_sched_config(uint16_t time_comparator)
 
 int NodeFlow::init_send_sched_config()
 {
-    pc.printf("\r\nScheduled sending times: \n");
+    pc.printf("\r\n---------------ADD SENDING TIMES-----------------\r\n");
     overwrite_send_sched_config(SEND_SCHEDULER,SEND_SCHEDULER_SIZE);
     if(read_send_sched_config(0))
     {
@@ -716,13 +824,14 @@ int NodeFlow::init_send_sched_config()
         {
             uint16_t time_remainder=DIVIDE(((int(nbiot_send_scheduler[i]))*HOURINSEC)+((fmod(nbiot_send_scheduler[i],1))*6000)); 
             append_send_sched_config(time_remainder);
+            pc.printf("%d. Sending ",i);
             timetodate(time_remainder*2);
         }
     }
     /**TODO: Send each time?! (Discuss) */
      else
     {   /**Periodically?! */
-        if(read_sched_config(1)==1)
+        if(read_sched_config(1))
         {
             append_send_sched_config(scheduler[0]);
         }
@@ -732,7 +841,6 @@ return NODEFLOW_OK;
 int NodeFlow::overwrite_send_sched_config(uint16_t code,uint16_t length)
 {
     SendSchedulerConfig ss_conf;
-    //code,length,values
     ss_conf.parameters.time_comparator=code;
 
     status= DataManager::overwrite_file_entries(SendSchedulerConfig_n, ss_conf.data, sizeof(ss_conf.parameters));
@@ -807,21 +915,24 @@ uint16_t NodeFlow::read_sched_config(int i)
 
     return r_conf.parameters.time_comparator;
 }
+int NodeFlow::read_sched_group_id(int i)
+{
+    SchedulerConfig r_conf;
+    status = DataManager::read_file_entry(SchedulerConfig_n, i, r_conf.data, sizeof(r_conf.parameters));
 
+    return r_conf.parameters.group_id;
+}
 
 
 /**Sets the flags, for just kicking the watchdog, sensing time,clock synch time, or sending time(NOT YET) */
-int NodeFlow:: set_flags_config(bool kick_wdg, bool sense_time, bool clock_synch,bool send_time)
+int NodeFlow:: set_flags_config(uint8_t ssck_flag)
 {
     FlagsConfig f_conf;
-    f_conf.parameters.kick_wdg=kick_wdg;
-    f_conf.parameters.sensing_time=sense_time;
-    f_conf.parameters.clock_synch=clock_synch;
-    f_conf.parameters.sending_time=send_time;
+    f_conf.parameters.ssck_flag=ssck_flag;
     f_conf.parameters.pin_wakeup=0;
 
     status= DataManager::overwrite_file_entries(FlagsConfig_n, f_conf.data, sizeof(f_conf.parameters));
-    if(status != 0)
+    if(status != NODEFLOW_OK)
     {
         pc.printf("Flags Config failed to overwrite: %i\r\n", status);  
     }
@@ -836,7 +947,7 @@ int NodeFlow::set_wakeup_pin_flag(bool wakeup_pin)
 
     f_conf.parameters.pin_wakeup=wakeup_pin;
     status= DataManager::overwrite_file_entries(FlagsConfig_n, f_conf.data, sizeof(f_conf.parameters));
-    if(status != 0)
+    if(status != NODEFLOW_OK)
     {
         pc.printf(" wakeup Flags Config failed to overwrite: %i\r\n", status);  
     }
@@ -845,18 +956,16 @@ int NodeFlow::set_wakeup_pin_flag(bool wakeup_pin)
 
 /**Ignore this for now 
  */
-int NodeFlow::add_sensors() { //uint8_t device_id[],uint16_t reading_time[],size_t number_of_sensors
-    pc.printf("\r\n-------------------ADD SENSORS--------------------\r\n");
-    /** Files Initialisation
-     */
+int NodeFlow::add_sensing_groups() {
+    pc.printf("\r\n---------------ADD SENSING GROUPS-----------------\r\n");
     sensor_config_init(SCHEDULER_SIZE);
     for (int i=0; i<SCHEDULER_SIZE; i++)
     {
-        SensorConfig s_conf;
-        s_conf.parameters.device_id = i;
-        s_conf.parameters.time_comparator=scheduler[i];
+        SensingGroupConfig sg_conf;
+        sg_conf.parameters.group_id = false;
+        sg_conf.parameters.time_comparator=scheduler[i];
         
-        status=DataManager::append_file_entry(SensorConfig_n, s_conf.data, sizeof(s_conf.parameters));
+        status=DataManager::append_file_entry(SensingGroupConfig_n, sg_conf.data, sizeof(sg_conf.parameters));
         if(status!=0)
         {
             pc.printf("Add file failed: %i\r\n", status);
@@ -864,24 +973,24 @@ int NodeFlow::add_sensors() { //uint8_t device_id[],uint16_t reading_time[],size
         }
 
         //temporary reading times
-        TempSensorConfig ts_conf;
-        ts_conf.parameters.device_id = i;
+        TempSensingGroupConfig ts_conf;
+        ts_conf.parameters.group_id = false;
         ts_conf.parameters.time_comparator=scheduler[i];
     
-        status = DataManager::append_file_entry(TempSensorConfig_n, ts_conf.data, sizeof(ts_conf.parameters));
+        status = DataManager::append_file_entry(TempSensingGroupConfig_n, ts_conf.data, sizeof(ts_conf.parameters));
         if(status!=NODEFLOW_OK)
         {
             pc.printf("Error append_file_entries No: %i status: %i\r\n", i, status);
             return status;
         }
             
-        status = DataManager::read_file_entry(TempSensorConfig_n, i, ts_conf.data, sizeof(ts_conf.parameters));
+        status = DataManager::read_file_entry(TempSensingGroupConfig_n, i, ts_conf.data, sizeof(ts_conf.parameters));
         if(status!=0)
         {
             pc.printf("Read file failed: %i\r\n", status);
             return status;
         }
-        pc.printf("%d. Sensing group id: %i, wake up every: %u Seconds\r\n",i, ts_conf.parameters.device_id,ts_conf.parameters.time_comparator);
+        pc.printf("%d. Sensing group id: %i, wake up every: %u Seconds\r\n",i, ts_conf.parameters.group_id,ts_conf.parameters.time_comparator);
                 
         }
      
@@ -897,25 +1006,27 @@ int NodeFlow::add_sensors() { //uint8_t device_id[],uint16_t reading_time[],size
  */
 int NodeFlow::set_scheduler()
 {
-    pc.printf("\r\n-----------------NEXT READING TIME----------------\r\n");
-    bool kick,sense,clock,send;
-    kick=sense=clock=send=false;
+   
+    uint8_t mybit_int;
+    bitset<8> ssck_flag(0b0000'0000);
+
     bool schedulerOn=read_sched_config(0);
     bool sendschedulerOn=read_send_sched_config(0);
     uint16_t length=read_sched_config(1);
     uint32_t timediff_temp=DAYINSEC;
     uint32_t timediff_temp_send=DAYINSEC;
+
     if(flags == NodeFlow::FLAG_CLOCK_SYNCH||flags == NodeFlow::FLAG_SENSE_SYNCH 
         ||flags == NodeFlow::FLAG_SEND_SYNCH ||flags == NodeFlow::FLAG_SENSE_SEND_SYNCH)
     {
         get_timestamp();
     }
+    pc.printf("\r\n-----------------NEXT READING TIME----------------\r\n");
     uint32_t time_remainder=this->time_now();
-
-    //Read the schedule time config, find the next time
-    int32_t timediff=0; //6600
+    int32_t timediff=0;
     uint32_t next_sch_time=0;
     uint32_t scheduled_times=0;
+    uint8_t group_id=0;
     if(schedulerOn)
     {
         for (int i=0; i<length; i++)
@@ -929,24 +1040,34 @@ int NodeFlow::set_scheduler()
             {
                 timediff=timediff+DAYINSEC;
             }
-            if (timediff<timediff_temp)
+            if (timediff <= timediff_temp)
             {
+                if (timediff < timediff_temp)
+                {
+                    group_id=read_sched_group_id(i+2);
+                }
+                if (timediff == timediff_temp)
+                {
+                    group_id=group_id+read_sched_group_id(i+2);             
+                }
+                
                 timediff_temp=timediff; //holds the smallest different form time_now
                 next_sch_time=scheduled_times;
+                overwrite_metric_flags(group_id);
             }  
         }
-        pc.printf("Next sensing time,");
+        pc.printf("Next Sensing ");
         timetodate(next_sch_time);
     }
-    else if(schedulerOn == false && read_sched_config(1))
+    else if(schedulerOn == false && length==1)
     {
         timediff_temp=read_sched_config(2);
     }
-    else if(schedulerOn == false &&read_sched_config(1)>1)
+    else if(schedulerOn == false && length>1)
     {
         timediff_temp=set_reading_time();  
     } 
-    sense=true;
+    ssck_flag.set(0);
     /**TODO: remove the comment */
     #if BOARD == EARHART_V1_0_0
     //send=true;
@@ -973,16 +1094,22 @@ int NodeFlow::set_scheduler()
                 next_sch_time=scheduled_times;
             }  
         }
-        pc.printf("Next sending time,");
+        pc.printf("Next Sending ");
         timetodate(next_sch_time);
 
          if(timediff_temp_send<=timediff_temp)
         {
-            send=true;
+           
+            ssck_flag.set(1);
+            if(schedulerOn == false && length>1)
+            {
+                fix_sensing_group_time(timediff_temp_send);
+            }
+               
             if(timediff_temp_send<timediff_temp)
             {
                 timediff_temp=timediff_temp_send;
-                sense=false;
+                ssck_flag.reset(0);
             } 
         }
     }
@@ -990,24 +1117,29 @@ int NodeFlow::set_scheduler()
     //the clock synch should be send in 2 bytes, so half the value)
     bool clockSynchOn=0;
     uint32_t cs_time=(2*read_clock_synch_config(clockSynchOn))-time_remainder;
-    
+
     if(clockSynchOn)
     {
-        pc.printf("Next clock synch time,");
+        pc.printf("Next ClkSync ");
         timetodate(2*read_clock_synch_config(clockSynchOn));
         if(cs_time < 0)
         {
             cs_time=cs_time+DAYINSEC;
         }
-        /**SENSE ONLY */
         if(cs_time<=timediff_temp)
         {   
-            clock=true;
+            
+            ssck_flag.set(2);
+            if(schedulerOn == false && length>1)
+            {
+                fix_sensing_group_time(cs_time);
+            }
             if(cs_time<timediff_temp)
             {
                 timediff_temp=cs_time;
-                sense=false;
-                send=false;
+                ssck_flag.reset(0);
+                ssck_flag.reset(1);
+                
             } 
         }
     }
@@ -1015,25 +1147,71 @@ int NodeFlow::set_scheduler()
     /**Check that its not more than 2 hours*/
     if (timediff_temp>6600)  
     {
+        if(schedulerOn == false && length>1)
+        {
+            fix_sensing_group_time(timediff_temp);
+        }
         timediff_temp=6600;
-        kick=true;
-        sense=false;
-        send=false;
-        clock=false;
+        ssck_flag.reset(0);
+        ssck_flag.reset(1);
+        ssck_flag.reset(2);
+        ssck_flag.set(3);
+       
     } 
-    pc.printf("Kick flag: %d, Sense flag: %d, Clock: %d, Send flag: %d",kick,sense,clock,send);
-    set_flags_config(kick,sense,clock,send);
+    mybit_int = int(ssck_flag.to_ulong());
+
+    pc.printf("\r\nSense flag: %d, Send flag: %d,Clock: %d, Kick flag: %d,\n", ssck_flag.test(0), ssck_flag.test(1), ssck_flag.test(2), ssck_flag.test(3));
+    set_flags_config(mybit_int);
     ovewrite_wakeup_timestamp(timediff_temp);
 
     return timediff_temp;   
 }
 
+
+
+int NodeFlow::fix_sensing_group_time(uint32_t time){
+    uint16_t sched_length=read_sched_config(1);
+    uint8_t temp[sched_length];
+    TempSensingGroupConfig ts_conf;
+    SensingGroupConfig sg_conf;
+
+    for(int i=0; i<sched_length; i++)
+    {
+        status = DataManager::read_file_entry(TempSensingGroupConfig_n, i, ts_conf.data, sizeof(ts_conf.parameters));
+        ts_conf.parameters.time_comparator= ts_conf.parameters.time_comparator-time;
+        temp[i]=ts_conf.parameters.time_comparator;
+    }
+    for(int i=0; i<sched_length; i++)
+    {   
+        ts_conf.parameters.time_comparator=temp[i];
+        if(i == 0)
+        {
+            status=DataManager::overwrite_file_entries(TempSensingGroupConfig_n, ts_conf.data, sizeof(ts_conf.parameters));  
+        }
+        else
+        {
+            status=DataManager::append_file_entry(TempSensingGroupConfig_n, ts_conf.data, sizeof(ts_conf.parameters));
+            if(status!=DATA_MANAGER_OK)
+            {
+                status=DataManager::append_file_entry(TempSensingGroupConfig_n, ts_conf.data, sizeof(ts_conf.parameters));
+                pc.printf("Error write temp sensor config. status: %i\r\n", status);
+                return status;
+            }
+        }
+
+    }
+return NODEFLOW_OK;
+}
 int NodeFlow::set_reading_time()
 { 
-    TempSensorConfig ts_conf;
+    TempSensingGroupConfig ts_conf;
     TimeConfig t_conf;
-    TempConfig tm_conf;
-    SensorConfig s_conf;
+    SensingGroupConfig sg_conf;
+    
+
+    uint16_t temp_time[SCHEDULER_SIZE];
+    uint8_t mybit_int;
+    bitset<8> flags(0b0000'0000);
 
     status = DataManager::read_file_entry(TimeConfig_n, 0, t_conf.data,sizeof(t_conf.parameters));
     if(status != DATA_MANAGER_OK)
@@ -1043,9 +1221,8 @@ int NodeFlow::set_reading_time()
     }
 
     int time_comparator=t_conf.parameters.time_comparator; 
-    pc.printf("\r\nTime comparator equals %d (should be zero at first)\r\n",time_comparator);
-
-    status = DataManager::read_file_entry(TempSensorConfig_n, 0, ts_conf.data, sizeof(ts_conf.parameters));
+    
+    status = DataManager::read_file_entry(TempSensingGroupConfig_n, 0, ts_conf.data, sizeof(ts_conf.parameters));
     if(status != DATA_MANAGER_OK)
     {
         pc.printf("Error read_file_entry Temporary Config. status: %i\r\n", status);
@@ -1056,108 +1233,113 @@ int NodeFlow::set_reading_time()
     
     for (int i=0; i<SCHEDULER_SIZE; i++)
     {
-        status=DataManager::read_file_entry(TempSensorConfig_n, i, ts_conf.data, sizeof(ts_conf.parameters));
+        status=DataManager::read_file_entry(TempSensingGroupConfig_n, i, ts_conf.data, sizeof(ts_conf.parameters));
         if(status != DATA_MANAGER_OK)
         {
             pc.printf("%i Error read_file_entry Temporary Config. status: %i\r\n",i, status);
             return status;
         }
-
-        int dev_id=ts_conf.parameters.device_id;
-        int time_comparator_now= ts_conf.parameters.time_comparator;//(temp1);//-time_comparator;
+      
+        int time_comparator_now= ts_conf.parameters.time_comparator;
 
         if (temp >= time_comparator_now && time_comparator_now != 0)
         {
-            temp=time_comparator_now;      
+            flags.set(i);                    
+            if(temp>time_comparator_now)
+            {
+                for(int y=0; y<i; y++)
+                {
+                    flags.reset(y);
+                }
+            }
+
+            temp=time_comparator_now; 
         }
     }
 
     time_comparator=temp;
-   
+    mybit_int = int(flags.to_ulong());
+    overwrite_metric_flags(mybit_int);
     status=set_time_config(time_comparator);
-     
+    
     for(int i=0; i<SCHEDULER_SIZE; i++)
     {
-        status=DataManager::read_file_entry(TempSensorConfig_n, i, ts_conf.data, sizeof(ts_conf.parameters));
+        status=DataManager::read_file_entry(TempSensingGroupConfig_n, i, ts_conf.data, sizeof(ts_conf.parameters));
         if(status != DATA_MANAGER_OK)
         {
             pc.printf("Error read temporary time sensor config. status: %i\r\n", status);
             return status;
         }
-        
-        /** TODO: Creating two new ints, can we just directly assign tm_conf.device/time_comparator? */
-        // int dev_id=ts_conf.parameters.device_id;
-        int time_comp= ts_conf.parameters.time_comparator-time_comparator;
-        tm_conf.parameters.device_id=ts_conf.parameters.device_id;
-        tm_conf.parameters.time_comparator=time_comp;
+        int time_comp=ts_conf.parameters.time_comparator-time_comparator;
+        temp_time[i]=time_comp;
+       
 
         if(time_comp == 0)
         {
-            status=DataManager::read_file_entry(SensorConfig_n, i, s_conf.data, sizeof(s_conf.parameters));
+            status=DataManager::read_file_entry(SensingGroupConfig_n, i, sg_conf.data, sizeof(sg_conf.parameters));
             if(status != DATA_MANAGER_OK)
             {
                 pc.printf("Error read sensor config. status: %i\r\n", status);
                 return status;
             }
-
-            tm_conf.parameters.time_comparator=s_conf.parameters.time_comparator;
+           
+            temp_time[i]=sg_conf.parameters.time_comparator;
         }
 
-        /** TODO: Indentation */
-        //i can't overwrite while reading the pointer is setting me at the first so i created a temporary config 
-        if(i == 0)
-        {
-            status=DataManager::overwrite_file_entries(TempConfig_n, tm_conf.data, sizeof(tm_conf.parameters));  
-        }
-        else{
-            status=DataManager::append_file_entry(TempConfig_n, tm_conf.data, sizeof(tm_conf.parameters));
-        }
-        if (status!=DATA_MANAGER_OK){
-            pc.printf("Error Temp config. status: %i\r\n", status);
-            return status;
-        }
     }
 
-    /** TODO: Indentation */
-    for (int i=0; i<SCHEDULER_SIZE; i++)
+    for(int i=0; i<SCHEDULER_SIZE; i++)
     {
-        status=DataManager::read_file_entry(TempConfig_n, i, tm_conf.data, sizeof(tm_conf.parameters));
-        if (status!=DATA_MANAGER_OK)
-        {
-            pc.printf("Error read temp config. status: %i\r\n", status);
-            return status;
-        }
-        pc.printf("%d. Sensing group id: %i, next reading: %u seconds\r\n",i, tm_conf.parameters.device_id,tm_conf.parameters.time_comparator);
+         pc.printf("%d. Sensing group id: %i, next reading: %u seconds\r\n",i,i,temp_time[i]);
     
-        ts_conf.parameters.device_id=tm_conf.parameters.device_id;
-        ts_conf.parameters.time_comparator=tm_conf.parameters.time_comparator;
+        ts_conf.parameters.group_id=i;
+        ts_conf.parameters.time_comparator=temp_time[i];
 
-        if(i==0)
+        if(i == 0)
         {
-            status=DataManager::overwrite_file_entries(TempSensorConfig_n, ts_conf.data, sizeof(ts_conf.parameters));  
+            status=DataManager::overwrite_file_entries(TempSensingGroupConfig_n, ts_conf.data, sizeof(ts_conf.parameters));  
         }
         else
         {
-            status=DataManager::append_file_entry(TempSensorConfig_n, ts_conf.data, sizeof(ts_conf.parameters));
-        }
-        if (status!=DATA_MANAGER_OK)
-        {
-            pc.printf("Error write temp sensor config. status: %i\r\n", status);
-            return status;
+            status=DataManager::append_file_entry(TempSensingGroupConfig_n, ts_conf.data, sizeof(ts_conf.parameters));
+            if(status!=DATA_MANAGER_OK)
+            {
+                /**TODO: FAILS Occasionaly */
+                status=DataManager::append_file_entry(TempSensingGroupConfig_n, ts_conf.data, sizeof(ts_conf.parameters));
+                pc.printf("Error write temp sensor config. status: %i\r\n", status);
+                return status;
+            }
         }
     }
-
-    pc.printf("\r\nNext Reading time %d ,No of sensors: %d\r\n",time_comparator, SCHEDULER_SIZE);
-    pc.printf("--------------------------------------------------\r\n");
-
+    
+    pc.printf("\r\nNext Reading ");
+    timetodate(time_comparator+time_now());
+    pc.printf("GroupA: %d, GroupB: %d, GroupC: %d, GroupD: %d\n", flags.test(0), flags.test(1), flags.test(2), flags.test(3));
+    //pc.printf("--------------------------------------------------\r\n");
+    
     return time_comparator;
 }
+int NodeFlow::overwrite_metric_flags(uint8_t mybit_int)
+{
+    MetricGroupConfig mg_conf;
+    mg_conf.parameters.metric_group_id=mybit_int;
+    status=DataManager::overwrite_file_entries(MetricGroupConfig_n, mg_conf.data, sizeof(mg_conf.parameters));
+    if(status != DATA_MANAGER_OK)
+    {   
+        /**TODO: SOLUTION for occasionaly failing to overwrite (not just here) */
+        status=DataManager::overwrite_file_entries(MetricGroupConfig_n, mg_conf.data, sizeof(mg_conf.parameters));
+        pc.printf("Error metric flag config. status: %i\r\n", status);
+        return status;
+    }
+    return status;
 
-uint16_t NodeFlow::get_interrupt_latency(){
+}
+uint16_t NodeFlow::get_interrupt_latency()
+{
     NextTimeConfig t_conf;
-
     status=DataManager::read_file_entry(NextTimeConfig_n, 0, t_conf.data,sizeof(t_conf.parameters));
-    if (status!=DATA_MANAGER_OK){
+    if (status!=DATA_MANAGER_OK)
+    {
         pc.printf("Error read_file_entry TimeConfig. status: %i\r\n", status);
         return 2;
     }
@@ -1172,7 +1354,7 @@ int NodeFlow::ovewrite_wakeup_timestamp(uint16_t time_remainder){
 
      NextTimeConfig t_conf;
     t_conf.parameters.time_comparator=next_sch_time;
-    status= DataManager::overwrite_file_entries( NextTimeConfig_n, t_conf.data, sizeof(t_conf.parameters));
+    status=DataManager::overwrite_file_entries( NextTimeConfig_n, t_conf.data, sizeof(t_conf.parameters));
     if (status!=DATA_MANAGER_OK){
         pc.printf(" NextTime Config failed to overwrite: %i\r\n", status);
     }
@@ -1186,12 +1368,17 @@ int NodeFlow::ovewrite_wakeup_timestamp(uint16_t time_remainder){
  */
 uint8_t NodeFlow::get_timestamp(){
    #if BOARD == EARHART_V1_0_0
-        int retcode =joinTTN();
+        int retcode=lpwan.join(CLASS_A);
+        if(retcode<0)
+        {
+            pc.printf("Failed to join :%d\r\n",retcode);
+        }
         int64_t timestamp=0;
         uint8_t dummy[1]={1};
         uint8_t port=0;
         pc.printf("Horrayy,setting the time, bear with me\r\nRetries are set to %d\r\n",MAX_RETRY_CLOCK_SYNCH);
         retcode=lpwan.send_message(223, dummy, sizeof(dummy));
+
         if(retcode<=0)
         {
             pc.printf("Failed to send\r\n");
@@ -1232,31 +1419,24 @@ uint8_t NodeFlow::timetodate(uint32_t remainder_time)
     double_t minutes=minutes_f*MINUTEINSEC; 
     double_t seconds=(fmod(minutes,1))*MINUTEINSEC;
     pc.printf("Time(HH:MM:SS):   %02d:%02d:%02d\r\n", hours, int(minutes),int(seconds));
-    return 0;
+    return NODEFLOW_OK;
 }
 
 /**LorawanTP
  */
 #if BOARD == EARHART_V1_0_0
-int NodeFlow::joinTTN()
+
+int NodeFlow::sendTTN(uint8_t port, uint8_t payload[], uint16_t length)
 {
-    
-    int retcode=lpwan.join();
-    if(retcode<0)
+    int retcode=lpwan.join(CLASS_C);
+    if(retcode<NODEFLOW_OK)
     {
         pc.printf("Failed to join :%d\r\n",retcode);
     }
-    return retcode;
-}
-int NodeFlow::sendTTN(uint8_t port, uint8_t payload[], uint16_t length)
-{
-    int retcode=0; 
-    joinTTN();
     pc.printf("---------------------SENDING----------------------\r\n");
     timetodate(time_now());
-
     retcode=lpwan.send_message(port, payload, length);
-    if (retcode<0)
+    if (retcode<NODEFLOW_OK)
     {
         pc.printf("\r\nError Sending %d bytes", retcode);
     }
@@ -1282,7 +1462,7 @@ uint64_t NodeFlow::receiveTTN()
         {
             decValue=lpwan.receive_message(true).received_value[i];
             pc.printf("%i.RX scheduler: %d(10)\r\n",i, decValue);
-            append_sched_config(decValue);
+            append_sched_config(decValue,1); //TODO: CHANGE GROUP ID- depends on data
         }
     }
     
@@ -1315,54 +1495,54 @@ uint64_t NodeFlow::receiveTTN()
 #endif /* #if BOARD == EARHART_V1_0_0 */
 
 
-/** TODO: Indentation */
 int NodeFlow::get_flags()
 {    
     FlagsConfig f_conf;
     status=DataManager::read_file_entry(FlagsConfig_n, 0, f_conf.data,sizeof(f_conf.parameters));
+    bitset<8> ssck_flag(f_conf.parameters.ssck_flag);
 
-    if (status!=DATA_MANAGER_OK)
+    if(status!=DATA_MANAGER_OK)
     {
         pc.printf("FlagsConfig. status: %i\r\n", status);
         return status;
     }
 
-    if ((f_conf.parameters.clock_synch)&&(f_conf.parameters.sensing_time)&&(f_conf.parameters.sending_time))
+    if(ssck_flag.test(0) && ssck_flag.test(1) && ssck_flag.test(2))
     {
         return NodeFlow::FLAG_SENSE_SEND_SYNCH;
     }
 
-    if ((f_conf.parameters.clock_synch)&&(f_conf.parameters.sensing_time))
+    if(ssck_flag.test(1) && ssck_flag.test(2))
     {
         return NodeFlow::FLAG_SEND_SYNCH;
     }
-    if ((f_conf.parameters.sensing_time)&&(f_conf.parameters.sensing_time))
+    if(ssck_flag.test(0) && ssck_flag.test(1))
     {
         return NodeFlow::FLAG_SENSE_SEND;
     }
-    if ((f_conf.parameters.clock_synch)&&(f_conf.parameters.sensing_time))
+    if(ssck_flag.test(0) && ssck_flag.test(2))
     {
         return NodeFlow::FLAG_SENSE_SYNCH;
     }
-    if (f_conf.parameters.clock_synch)
+    if(ssck_flag.test(2))
     {
         return NodeFlow::FLAG_CLOCK_SYNCH;
     }
-    if (f_conf.parameters.kick_wdg)
+    if(ssck_flag.test(3))
     {
         return NodeFlow::FLAG_WDG;
     }
-    if (f_conf.parameters.sensing_time)
+    if(ssck_flag.test(0))
     {
         return NodeFlow::FLAG_SENSING;
     }
 
-    if (f_conf.parameters.sending_time)
+    if(ssck_flag.test(1))
     {
         return NodeFlow::FLAG_SENDING;
     }
 
-    return NodeFlow::FLAG_SENDING;
+    return NodeFlow::FLAG_SENDING; //TODO: in case it fails?!
 }
 
 int NodeFlow::delay_pin_wakeup()
