@@ -316,13 +316,24 @@ void NodeFlow::start(){
         { 
             NVIC_SystemReset(); 
         }
+
+        if(_comms_stack == Comms_Radio_Stack::NBIOT)
+        {
+            _radio.ready(); //TODO:if that returns zero
+            _radio.start(); //TODO: return something in main success(0) or failure 
+
+        }
+
         setup();
+        
         if(CLOCK_SYNCH)
         {
             get_timestamp();
         }
+
         timetodate(time_now());
         init_sched_config();
+
         /**TODO: NBIOT ONLY defined */
         init_send_sched_config();
         
@@ -355,10 +366,17 @@ int NodeFlow::HandleModem()
             if(flags.test(0)==1)
             {
                 payload=MetricGroupA(length);
+                #if BOARD == WRIGHT_V1_0_0
+                //TODO: LOG DATA TO EEPROM,data structure from user 
+
+                #endif
+
+
                 #if BOARD == EARHART_V1_0_0
                     sendTTN(1, payload, length);            
                     receiveTTN();
                 #endif 
+
             }
             if(flags.test(1))
             {
@@ -402,6 +420,15 @@ int NodeFlow::HandleModem()
     { 
         /**TODO: NBIOT send */
         #if BOARD == WRIGHT_V1_0_0
+       // char *send_data TODO: response from eeprom 
+       // char recv_data[512];
+       //int data_indentifier= TEXT_PLAIN
+       //int response_code=-1;
+
+       // _radio.coap_post(char *send_data, char *recv_data,SaraN2::TEXT_PLAIN, int &response_code);
+       //status
+
+
         #endif
         /**TODO: do an if Succesfully send  */
         _clear_after_send();
@@ -1400,6 +1427,10 @@ uint8_t NodeFlow::get_timestamp(){
     
     #endif /* BOARD == EARHART_V1_0_0 */
 
+    #if BOARD == WRIGHT_V1_0_0
+
+    #endif
+
     return NODEFLOW_OK;   
 }
 
@@ -1565,6 +1596,8 @@ int NodeFlow::delay_pin_wakeup()
  */
 int NodeFlow::_clear_after_send()
 {
+    //TODO: clear EEPROM after sending Succesfully
+    
    _clear_increment();
     
  return NODEFLOW_OK;
