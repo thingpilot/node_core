@@ -16,6 +16,7 @@
 #include "rtos.h"
 #include <cmath>
 #include "tp_sleep_manager.h"
+#include <bitset>
 
 #if BOARD == EARHART_V1_0_0
     #include "LorawanTP.h"
@@ -117,24 +118,41 @@ class NodeFlow: public DataManager
          */
         virtual int HandleInterrupt() = 0;
 
-        /** HandlePeriodic() allows the user to periodically read any sensors that are on the board. Every variant 
+        /** MetricGroupZero() allows the user to periodically read any sensors that are on the board. Every variant 
          *  of a board is different, users different sensors, and thus requires application-specific code in order
-         *  to interact with the sensors. This is where that code should be
+         *  to interact with the sensors.
          */  
-        virtual uint8_t* HandlePeriodic(uint16_t &length) = 0; //uint8_t payload[], uint16_t &length
+        
+        virtual uint8_t* MetricGroupA(uint16_t &length) = 0; 
+      
+        #if (SCHEDULER_B)
+        virtual uint8_t* MetricGroupB(uint16_t &length) = 0;
+        #endif 
+        #if (SCHEDULER_C)
+        virtual uint8_t* MetricGroupC(uint16_t &length) = 0;
+        #endif
+        #if (SCHEDULER_D)
+        virtual uint8_t* MetricGroupD(uint16_t &length) = 0;
+        #endif
+
+        // virtual int AddPayload(auto payload)=0;
         /** Virtual functions END ************************************************************************************/ 
-
-        int getPlatform();
-        int HandleModem();
-
-        /** Initialise device.
+        
+        /** start() drives the all the application. It handles the different modem and configuration.
          */
         void start();
+        int increment(int i);
+        int read_increment();
+    private:
 
-        /** Add sensors ids
+        int HandleModem();
+        //TODO: MOVE THIS
+        int fix_sensing_group_time(uint32_t time);
+
+        /** Add metric groups, can only add 3
          *  @param device_sn Seconds until next wakeup
          */
-        int add_sensors(); //uint8_t device_sn[],uint16_t reading_time[],size_t number_of_sensors
+        int add_sensing_groups(); //uint8_t device_sn[],uint16_t reading_time[],size_t number_of_sensors
 
         /** Reading sensors periodically, handles each sensor differently?!
          * @param arr    Specific times for reading the sensors,                 
@@ -143,7 +161,7 @@ class NodeFlow: public DataManager
          *               i) The sleeping time until next reading sensors measurement.
          *               ii) Watchdog wakeup if the time until next reading is more than two hours
          */        
-        int set_reading_time(); //uint16_t arr[],size_t n
+        int set_reading_time(); 
     
         /** Scheduler for reading sensors
          * @param reading_specific_time_h_m      Specific times for reading the sensors,                   
@@ -156,14 +174,6 @@ class NodeFlow: public DataManager
 
         /** LORAWAN **************************************************************************************************/
         #if BOARD == EARHART_V1_0_0
-
-        /** Join the LPWAN- TTN network either with ABP or OTAA. 
-         *  You must call this before using the send/receive.
-         *
-         * @return        i) LORAWAN_STATUS_OK on success
-         *               ii) A negative error code on failure.            
-         */
-        int joinTTN();
 
         /** Send a message from the Network Server on a specific port.
          *
@@ -201,7 +211,7 @@ class NodeFlow: public DataManager
         #endif /* #if BOARD == WRIGHT_V1_0_0 */
         /** NB-IoT ***************************************************************************************************/
 
-    //private:
+    
         
         /** Wakeup/time 
          */
@@ -232,9 +242,10 @@ class NodeFlow: public DataManager
         //int sched_config_init(int length);
         //int set_sched_config(int time_comparator);
         int overwrite_sched_config(uint16_t code,uint16_t length);
-        int append_sched_config(uint16_t time_comparator);
+        int append_sched_config(uint16_t time_comparator, uint8_t group_id);
         int init_sched_config();
         uint16_t read_sched_config(int i);
+        int read_sched_group_id(int i);
 
         int overwrite_send_sched_config(uint16_t code,uint16_t length);
         int append_send_sched_config(uint16_t time_comparator);
@@ -244,6 +255,8 @@ class NodeFlow: public DataManager
         int overwrite_clock_synch_config(int time_comparator, bool clockSynchOn);
         
         uint16_t read_clock_synch_config(bool &clockSynchOn);
+
+        int overwrite_metric_flags(uint8_t mybit_int);
         
         /** Initialisation for all config files 
          */
@@ -253,13 +266,12 @@ class NodeFlow: public DataManager
         int sensor_config_init(int length);
         /** Set flags for the next wake up
          */
-        int set_flags_config(bool kick_wdg, bool sense_time, bool clock_synch, bool send_time);
+        int set_flags_config(uint8_t ssck_flag);
 
         int get_flags();
         int delay_pin_wakeup();
         int set_wakeup_pin_flag(bool wakeup_pin);
-        int increment(int i);
-        int read_increment();
+        
         void _clear_increment();
         int _clear_after_send();
 
