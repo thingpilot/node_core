@@ -17,6 +17,7 @@
 #include <cmath>
 #include "tp_sleep_manager.h"
 #include <bitset>
+#include <variant>
 
 #if BOARD == EARHART_V1_0_0
     #include "LorawanTP.h"
@@ -36,6 +37,199 @@
 #define DAYINSEC    86400
 #define HOURINSEC   3600
 #define MINUTEINSEC 60
+
+/** Eeprom configuration. 
+ *
+ * @param DeviceConfig. Device specifics- send with the message payload.
+ * @param SensorDataConfig. Each sensor will be able to store a specific amount of values (to be specified).
+ * @param SchedulerConfig. Holds the scheduled times by the user.
+ * @param SensingGroupConfig. Each sensor is registered in the Sensor config file.
+ */
+union DeviceConfig
+{
+    struct 
+    {
+        uint32_t device_sn; //Device unique id?! our unique id?
+        uint8_t modulation; //defined 0 or 1 for lora, nbiot respectively,    
+    } parameters;
+
+    char data[sizeof(DeviceConfig::parameters)];
+};
+
+/** We need to agree on what this shoud be, data formatter? 
+ *  I think 
+ */
+
+union SensorDataConfig
+{
+    struct 
+    {
+        char value[]; //store a byte array // group_id flag
+
+    } parameters;
+
+    char data[sizeof(SensorDataConfig::parameters)];
+};
+
+/** The User can define MAX_BUFFER_READING_TIMES 
+ */
+union SchedulerConfig
+{
+    struct 
+    {   
+        uint16_t time_comparator; //first value holds status, second holds length of the array
+        uint8_t group_id;
+        
+    } parameters;
+
+    char data[sizeof(SchedulerConfig::parameters)];
+};
+
+union MultiSchedulerConfig
+{
+    struct 
+    {   
+        uint16_t time_comparator; 
+        uint8_t group_id;
+        
+    } parameters;
+
+    char data[sizeof(MultiSchedulerConfig::parameters)];
+
+};
+
+/** The User can define MAX_BUFFER_READING_TIMES 
+ */
+union SendSchedulerConfig
+{
+    struct 
+    {   
+        uint16_t time_comparator; //first value holds status, second holds length of the array
+        
+    } parameters;
+
+    char data[sizeof(SendSchedulerConfig::parameters)];
+};
+
+union ClockSynchConfig
+{
+    struct 
+    {  
+        uint16_t time_comparator;
+        bool clockSynchOn;
+        
+    } parameters;
+
+    char data[sizeof(ClockSynchConfig::parameters)];
+};
+
+/** Program specific flags. Its every bit is a different flag. 0:SENSE, 1:SEND, 2:CLOCK, 3:KICK
+ */
+union FlagsConfig
+{
+    struct 
+    {    
+        uint8_t ssck_flag;
+        bool  pin_wakeup;
+         
+    } parameters;
+
+    char data[sizeof(FlagsConfig::parameters)];
+};
+
+union NextTimeConfig
+{
+    struct 
+    {
+        uint32_t time_comparator;
+        
+    } parameters;
+
+    char data[sizeof(NextTimeConfig::parameters)];
+};
+
+union IncrementConfig
+{
+    struct 
+    {    
+        uint16_t  increment; 
+    } parameters;
+
+    char data[sizeof(IncrementConfig::parameters)];
+};
+
+/** Sensor Config,TempSensingGroupConfig, Time Config be used in later version 
+ *  if the user wants to "register" each sensor for different reading times 
+ */
+union SensingGroupConfig
+{
+    struct 
+    {   
+        uint8_t group_id;
+        uint16_t time_comparator; 
+    } parameters;
+
+    char data[sizeof(SensingGroupConfig::parameters)];
+};
+
+union TempSensingGroupConfig
+{
+    struct 
+    {   
+        uint8_t group_id;
+        uint16_t time_comparator; 
+    } parameters;
+
+    char data[sizeof(TempSensingGroupConfig::parameters)];
+};
+
+/**TODO: Merge with ssck_flags group,Flags for each group */
+union MetricGroupConfig
+{
+    struct 
+    {
+        uint16_t metric_group_id;        
+        
+    } parameters;
+
+    char data[sizeof(MetricGroupConfig::parameters)];
+
+};
+/** Holds only the next sleeping time (time difference)
+ */
+union TimeConfig
+{
+    struct 
+    {
+        uint16_t time_comparator;
+        
+    } parameters;
+
+    char data[sizeof(TimeConfig::parameters)];
+};
+
+
+/** Each filename in the eeprom hold a unique number
+ */
+enum Filenames
+{
+    DeviceConfig_n              = 0,
+    SensorDataConfig_n          = 1, 
+    SchedulerConfig_n           = 2,
+    ClockSynchConfig_n          = 3,
+    FlagsConfig_n               = 4, 
+    IncrementConfig_n           = 5,
+    SensingGroupConfig_n        = 6, 
+    TimeConfig_n                = 7,
+    TempSensingGroupConfig_n    = 8,
+    NextTimeConfig_n            = 9,
+    SendSchedulerConfig_n       = 10,
+    MetricGroupConfig_n         = 11
+ };
+
+
+
+
 
 /** Nodeflow Class
  */
@@ -110,13 +304,13 @@ class NodeFlow: public DataManager
         /** setup() allows the user to write code that will only be executed once when the device is initialising.
          *  This is akin to Arduino's setup function and can be used to, for example, configure a sensor
          */
-        virtual int setup() = 0;
+        virtual void setup() = 0;
 
         /** HandleInterrupt() allows the user to define what should happen if an interrupt wakes the processor
          *  from sleep. For example, an accelerometer could be configured to detect when the device is moving 
          *  and alert the processor to this to trigger an upload of the devices current location
          */
-        virtual int HandleInterrupt() = 0;
+        virtual void HandleInterrupt() = 0;
 
         /** MetricGroupZero() allows the user to periodically read any sensors that are on the board. Every variant 
          *  of a board is different, users different sensors, and thus requires application-specific code in order
@@ -140,11 +334,17 @@ class NodeFlow: public DataManager
         
         /** start() drives the all the application. It handles the different modem and configuration.
          */
-        void start();
+        int start();
         int increment(int i);
-        int read_increment();
+        int read_increment(int *increment_value);
+
+        template <typename DataType>
+        void add_record(DataType data);
+
+
     private:
 
+        int add_sensing_entry(uint8_t value[], uint8_t len);
         int HandleModem();
         //TODO: MOVE THIS
         int fix_sensing_group_time(uint32_t time);
@@ -161,7 +361,7 @@ class NodeFlow: public DataManager
          *               i) The sleeping time until next reading sensors measurement.
          *               ii) Watchdog wakeup if the time until next reading is more than two hours
          */        
-        int set_reading_time(); 
+        int set_reading_time(uint32_t* time); 
     
         /** Scheduler for reading sensors
          * @param reading_specific_time_h_m      Specific times for reading the sensors,                   
@@ -170,7 +370,7 @@ class NodeFlow: public DataManager
          *                                       i) The sleeping time until next reading sensors measurement.
          *                                       ii) Watchdog wakeup if the time until next reading is more than two hours
          */        
-        int set_scheduler();
+        int set_scheduler(uint32_t* next_timediff);
 
         /** LORAWAN **************************************************************************************************/
         #if BOARD == EARHART_V1_0_0
@@ -193,7 +393,7 @@ class NodeFlow: public DataManager
          */        
         int sendTTN(uint8_t port, uint8_t payload[], uint16_t length);
         
-        uint64_t receiveTTN();
+        int receiveTTN(uint32_t* rx_message=NULL, uint8_t* rx_port=NULL);
 
         #endif /* #if BOARD == EARHART_V1_0_0 */
         /** LORAWAN END **********************************************************************************************/
@@ -216,7 +416,7 @@ class NodeFlow: public DataManager
         /** Wakeup/time 
          */
         int initialise(); 
-        uint8_t get_timestamp();
+        int get_timestamp();
         uint32_t time_now();
         uint8_t timetodate(uint32_t remainder_time);
 
@@ -244,23 +444,23 @@ class NodeFlow: public DataManager
         int overwrite_sched_config(uint16_t code,uint16_t length);
         int append_sched_config(uint16_t time_comparator, uint8_t group_id);
         int init_sched_config();
-        uint16_t read_sched_config(int i);
-        int read_sched_group_id(int i);
+        int read_sched_config(int i,uint16_t* time_comparator);
+        int read_sched_group_id(int i, uint8_t* group_id);
 
         int overwrite_send_sched_config(uint16_t code,uint16_t length);
         int append_send_sched_config(uint16_t time_comparator);
         int init_send_sched_config();
-        uint16_t read_send_sched_config(int i);
+        int read_send_sched_config(int i, uint16_t* time);
 
         int overwrite_clock_synch_config(int time_comparator, bool clockSynchOn);
         
-        uint16_t read_clock_synch_config(bool &clockSynchOn);
+        int read_clock_synch_config(uint16_t* time,bool &clockSynchOn);
 
         int overwrite_metric_flags(uint8_t mybit_int);
         
-        /** Initialisation for all config files 
-         */
-        int config_init();
+
+        int timetoseconds(float scheduler_time, uint8_t group_id);
+    
         int time_config_init();
         
         int sensor_config_init(int length);
@@ -272,12 +472,12 @@ class NodeFlow: public DataManager
         int delay_pin_wakeup();
         int set_wakeup_pin_flag(bool wakeup_pin);
         
-        void _clear_increment();
+        int _clear_increment();
         int _clear_after_send();
 
         /** Handle Interrupt 
          */
-        uint16_t get_interrupt_latency();
+        int get_interrupt_latency(uint32_t *next_sch_time);
         int ovewrite_wakeup_timestamp(uint16_t time_remainder);
 
         /** Manage device sleep times before calling sleep_manager.standby().
@@ -315,11 +515,12 @@ class NodeFlow: public DataManager
 
 /**Critical errors that the device will need to reset if happens */
     enum
-    {   NODEFLOW_OK             =  0,
-        DATA_MANAGER_FAIL       = -1,
-        LORAWAN_TP_FAILED       = -2,
-        NBIOT_TP_FAILED         = -3,
-        EEPROM_DRIVER_FAILED    = -4,
+    {   
+        NODEFLOW_OK                 =  0,
+        DATA_MANAGER_FAIL           = -1,
+        LORAWAN_TP_FAILED           = -2,
+        NBIOT_TP_FAILED             = -3,
+        EEPROM_DRIVER_FAILED        = -4,
 
     };
 };
