@@ -17,6 +17,7 @@ Serial pc(TP_PC_TXU, TP_PC_RXU);
  */
 int flags=NodeFlow::FLAG_UNKNOWN;
 int status = -1;
+int written_entries=0;
 #if(SCHEDULER)
 float scheduler[1];
 #endif
@@ -53,7 +54,6 @@ NodeFlow::NodeFlow(PinName write_control, PinName sda, PinName scl, int frequenc
  */
  NodeFlow::~NodeFlow() 
  {
-
  }
 
 #if BOARD == WRIGHT_V1_0_0
@@ -92,17 +92,15 @@ void NodeFlow::start()
         if (status != NODEFLOW_OK)
         {
             pc.printf("Error read_file_entry NextTimeConfig. status: %i\r\n", status);
-           // return status;
         }
 
         if(next_time>INTERRUPT_DELAY)
         {
             next_time=INTERRUPT_DELAY;
-            status=set_wakeup_pin_flag(true); //TODO: RAFAELLA: Adam, should I make an increment of consecutive failures?
+            status=set_wakeup_pin_flag(true);
             if (status != NODEFLOW_OK)
             {
                 pc.printf("Error set_wakeup_pin_flag. status: %i\r\n", status);
-               // return status;
             }
         }
         
@@ -118,14 +116,12 @@ void NodeFlow::start()
             if (status != NODEFLOW_OK)
             {
                 pc.printf("Error set_wakeup_pin_flag. status: %i\r\n", status);
-                //return status;
             }
 
             status=get_interrupt_latency(&next_time);
             if (status != NODEFLOW_OK)
             {
                 pc.printf("Error read_file_entry NextTimeConfig. status: %i\r\n", status);
-                //return status;
             }
         }
         else
@@ -137,7 +133,6 @@ void NodeFlow::start()
             if (status != NODEFLOW_OK)
             {
                 pc.printf("Error set_scheduler. status: %i\r\n", status);
-                //return status;
             }
            
         }
@@ -168,35 +163,28 @@ void NodeFlow::start()
         if (status!=NODEFLOW_OK)
         {
             pc.printf("Error init_sched_config. status: %i\r\n", status);
-            //return status;
-
         }
 
-        /**TODO: NBIOT ONLY defined */
-        status=init_send_sched_config();
-        if (status!=NODEFLOW_OK)
-        {
-            pc.printf("Error init_send_sched_config. status: %i\r\n", status);
-            //return status;
-
-        }   
-        
+        #if(SEND_SCHEDULER)
+            status=init_send_sched_config();
+            
+            if (status!=NODEFLOW_OK)
+            {
+                pc.printf("Error init_send_sched_config. status: %i\r\n", status);
+            }   
+        #endif
         flags=get_flags();
         status=set_scheduler(&next_time); 
         if (status!=NODEFLOW_OK)
         {
             pc.printf("Error set_scheduler. status: %i\r\n", status);
-           // return status;
         }  
          
     }
     pc.printf("\nGoing to sleep for %d ",next_time);
-    
     timetodate(time_now());
     enter_standby(next_time,true);
-    //return NODEFLOW_OK;
 }
-
 
 /** Initialise the EEPROM
  * @return Status
@@ -218,31 +206,31 @@ int NodeFlow::initialise()
        return DATA_MANAGER_FAIL;
     }
 
-    /** DeviceConfig */ //TODO: CHECK IF WE NEED THIS
-    DataManager_FileSystem::File_t DeviceConfig_File_t;
-    DeviceConfig_File_t.parameters.filename = DeviceConfig_n;
-    DeviceConfig_File_t.parameters.length_bytes = sizeof( DeviceConfig::parameters);
+    // /** DeviceConfig */ //TODO: CHECK IF WE NEED THIS
+    // DataManager_FileSystem::File_t DeviceConfig_File_t;
+    // DeviceConfig_File_t.parameters.filename = DeviceConfig_n;
+    // DeviceConfig_File_t.parameters.length_bytes = sizeof( DeviceConfig::parameters);
 
-    status=DataManager::add_file(DeviceConfig_File_t, 1); 
-    if(status != NODEFLOW_OK)
-    {
-        pc.printf("Device Config failed: %i\r\n", status); 
-        return status;  
-    }
-    DeviceConfig w_conf;
-    w_conf.parameters.device_sn = STM32_UID[0];
-    #if BOARD == WRIGHT_V1_0_0
-        w_conf.parameters.modulation =0;
-    #endif
-    #if BOARD == EARHART_V1_0_0
-        w_conf.parameters.modulation =1;
-    #endif
-    status = DataManager::append_file_entry(DeviceConfig_n, w_conf.data, sizeof(w_conf.parameters));
-    if(status != NODEFLOW_OK)
-    {
-        pc.printf("DeviceConfig error: %i status: %i\r\n", 0, status);
-        return status; 
-    }
+    // status=DataManager::add_file(DeviceConfig_File_t, 1); 
+    // if(status != NODEFLOW_OK)
+    // {
+    //     pc.printf("Device Config failed: %i\r\n", status); 
+    //     return status;  
+    // }
+    // DeviceConfig w_conf;
+    // w_conf.parameters.device_sn = STM32_UID[0];
+    // #if BOARD == WRIGHT_V1_0_0
+    //     w_conf.parameters.modulation =0;
+    // #endif
+    // #if BOARD == EARHART_V1_0_0
+    //     w_conf.parameters.modulation =1;
+    // #endif
+    // status = DataManager::append_file_entry(DeviceConfig_n, w_conf.data, sizeof(w_conf.parameters));
+    // if(status != NODEFLOW_OK)
+    // {
+    //     pc.printf("DeviceConfig error: %i status: %i\r\n", 0, status);
+    //     return status; 
+    // }
 
     /** SchedulerConfig */
     DataManager_FileSystem::File_t SchedulerConfig_File_t;
@@ -265,14 +253,17 @@ int NodeFlow::initialise()
         return status;    
     }
 
-    /**TODO: DEFINE ONLY FOR NBIOT ?!*/
     /** SendSchedulerConfig 
      */
     DataManager_FileSystem::File_t SendSchedulerConfig_File_t;
     SendSchedulerConfig_File_t.parameters.filename = SendSchedulerConfig_n;  
     SendSchedulerConfig_File_t.parameters.length_bytes = sizeof( SendSchedulerConfig::parameters);
-
-    status=DataManager::add_file(SendSchedulerConfig_File_t, MAX_BUFFER_SENDING_TIMES+2); 
+    #if(SEND_SCHEDULER)
+        status=DataManager::add_file(SendSchedulerConfig_File_t, MAX_BUFFER_SENDING_TIMES+2); 
+    #endif
+    #if(!SEND_SCHEDULER)
+        status=DataManager::add_file(SendSchedulerConfig_File_t, 2);
+    #endif
     if(status != NODEFLOW_OK)
     {
         pc.printf("Send Scheduler Config failed: %i\r\n", status);
@@ -287,7 +278,7 @@ int NodeFlow::initialise()
         pc.printf("Send Scheduler error: %i\r\n", status);  
         return status;    
     }
-
+    
     /** ClockSynchConfig 
      */
     DataManager_FileSystem::File_t ClockSynchConfig_File_t;
@@ -300,13 +291,18 @@ int NodeFlow::initialise()
         pc.printf("ClockSynchConfig failed: %i\r\n", status);
         return status;   
     }
-    status=overwrite_clock_synch_config(DIVIDE(CLOCK_SYNCH_TIME),CLOCK_SYNCH);
+    #if (CLOCK_SYNCH)
+        status=overwrite_clock_synch_config(DIVIDE(CLOCK_SYNCH_TIME),CLOCK_SYNCH);
+    #endif
+    #if (!CLOCK_SYNCH)
+        status=overwrite_clock_synch_config(0,CLOCK_SYNCH);
+    #endif
     if (status != NODEFLOW_OK)
     {
         pc.printf("Clock Config failed to overwrite: %i\r\n", status);
         return status;
     }   
-    
+   
     /** FlagsConfig
      */
     DataManager_FileSystem::File_t FlagsConfig_File_t;
@@ -381,7 +377,6 @@ int NodeFlow::initialise()
     return status;
 }
 
-
 int NodeFlow::HandleModem()
 {
     uint16_t sched_length;
@@ -410,21 +405,15 @@ int NodeFlow::HandleModem()
 
             if(flags.test(1)==1)
             {
-                #if (SCHEDULER_B)
                 MetricGroupB(); 
-                #endif
             }
             if(flags.test(2)==1)
             {   
-                #if (SCHEDULER_C)
                 MetricGroupC(); 
-                #endif
             }
             if(flags.test(3)==1)
             {
-                #if (SCHEDULER_D)
                 MetricGroupD(); 
-                #endif
             }
         }
         else
@@ -437,48 +426,54 @@ int NodeFlow::HandleModem()
     if(flags==NodeFlow::FLAG_SENDING||flags==NodeFlow::FLAG_SENSE_SEND||
         flags==NodeFlow::FLAG_SEND_SYNCH||flags==NodeFlow::FLAG_SENSE_SEND_SYNCH)
     { 
-
-        int written_entries=0;
         status= DataManager::get_total_written_file_entries(SensorDataConfig_n, written_entries);
+        if(status != NODEFLOW_OK)
+        {
+            pc.printf("Get_total_written_file_entries failed: %i\r\n", status);
+            return status;
+        }
+
+        int response_code=-1;
         uint8_t payload[written_entries];
-        //read eeprom data
-        SensorDataConfig d_conf;
+        uint8_t nbiot_payload[written_entries+4];
+        uint32_t sn=STM32_UID[0];
+        *(time_t *)(nbiot_payload)=sn;
+      
         pc.printf("Written entries %d\r\n",written_entries);
         pc.printf("Buffer(LSB)  = 0x");
+        SensorDataConfig d_conf;
         for (int i=0; i<written_entries; i++) 
         {
             status = DataManager::read_file_entry(SensorDataConfig_n, i, d_conf.data, sizeof(d_conf.parameters));
             pc.printf(" %02x", d_conf.parameters.byte);   
             payload[i]=d_conf.parameters.byte;
-        
         }
         printf("\r\n");
-
         /**TODO: NBIOT send */
         #if BOARD == WRIGHT_V1_0_0
-       // char *send_data TODO: response from eeprom 
-       // char recv_data[512];
-       //int data_indentifier= TEXT_PLAIN
-       //int response_code=-1;
-
-       // _radio.coap_post(char *send_data, char *recv_data,SaraN2::TEXT_PLAIN, int &response_code);
-       //status
+            memcpy(nbiot_payload+4,payload,written_entries); /*Adds a part of the serial number 4 bytes*/
+            pc.printf("NBIOT Buffer(LSB)  = 0x");
+            for (int i=0; i<written_entries+4; i++) 
+            {
+                pc.printf(" %02x",nbiot_payload[i]);   
+            }
+            printf("\r\n");
+            //TODO: CHECK WITH NBIOT
+            char recv_data[512];
+            
+            _radio.coap_post(nbiot_payload, recv_data, SaraN2::TEXT_PLAIN, &response_code);
         #endif
 
         #if BOARD == EARHART_V1_0_0
-            sendTTN(1, payload, written_entries);
-
-            //TODO: Do we need to do something with the received message?
-            uint32_t rx_message=0;
-            uint8_t rx_port=0;
-            receiveTTN(&rx_message,&rx_port);
+            response_code=sendTTN(1, payload, written_entries);
         #endif 
 
-        /**TODO: do an if Succesfully send  */
-        _clear_after_send();
+        // if (response_code > NODEFLOW_OK) //TODO: wahts the response code?
+        // {
+            _clear_after_send();
+        // }   
     }
 
-   
     return NODEFLOW_OK;
 }
 
@@ -488,17 +483,24 @@ void NodeFlow::add_record(DataType data)
     uint8_t bytes[sizeof(DataType)];
     *(DataType *)(bytes)=data;
 
-    int written_entries=0;
-    status= DataManager::get_total_written_file_entries(SensorDataConfig_n, written_entries);
-    if(status != NODEFLOW_OK)
-    {
-        pc.printf("Get_total_written_file_entries failed to append: %i\r\n", status);
-    }
     if(written_entries == 0)
     {
         uint8_t mg_flag;
         get_metric_flags(&mg_flag);
         add_sensing_entry(mg_flag); 
+
+        #if BOARD == WRIGHT_V1_0_0
+            time_t time_now=time(NULL);
+            uint8_t time_bytes[4];
+            *(time_t *)(time_bytes)=time_now;
+            for (int i=0; i<4; i++)
+            {
+                printf("[ 0x%.2x]", time_bytes[i]);
+                add_sensing_entry(time_bytes[i]);
+            }
+        printf("\r\n");
+        #endif
+        written_entries=5;
     }
     printf("Bytes = ");
     for (int i=0; i<sizeof(DataType); i++)
@@ -509,14 +511,15 @@ void NodeFlow::add_record(DataType data)
     printf("\r\n");
 }
 
-/**TODO: Add all possible types */
 template void NodeFlow::add_record<float>(float data);
 template void NodeFlow::add_record<int>(int data);
 template void NodeFlow::add_record<int8_t>(int8_t data);
 template void NodeFlow::add_record<int16_t>(int16_t data);
+template void NodeFlow::add_record<int64_t>(int64_t data);
 template void NodeFlow::add_record<uint8_t>(uint8_t data);
 template void NodeFlow::add_record<uint16_t>(uint16_t data);
 template void NodeFlow::add_record<uint32_t>(uint32_t data);
+template void NodeFlow::add_record<uint64_t>(uint64_t data);
 
 int NodeFlow::add_sensing_entry(uint8_t value)
 {
@@ -739,12 +742,12 @@ int NodeFlow::init_sched_config()
             for(int i=0; i<SCHEDULER_SIZE; i++)
             { 
                 #if (!SCHEDULER)
-                status=append_sched_config(scheduler[i],0);
-                if(status != NODEFLOW_OK)
-                {
-                    pc.printf("Error append_sched_config: %i\r\n", status);
-                    return status;
-                }
+                    status=append_sched_config(scheduler[i],0);
+                    if(status != NODEFLOW_OK)
+                    {
+                        pc.printf("Error append_sched_config: %i\r\n", status);
+                        return status;
+                    }
                 #endif
             }
         }
@@ -761,7 +764,9 @@ int NodeFlow::timetoseconds(float scheduler_time, uint8_t group_id)
         pc.printf("Error append_sched_config: %i\r\n", status);
         return status;
     }
+    
     timetodate(time_remainder*2);
+
     return status;
 
 }
@@ -809,11 +814,16 @@ int NodeFlow::append_sched_config(uint16_t time_comparator,uint8_t group_id)
 
 /** SendScheduler Config TODO:overwrite in case of an NBIOT received_message, should be less than the MAX_BUFFER_SENDING_TIMES
  */
+
 int NodeFlow::init_send_sched_config()
 {
     pc.printf("\r\n---------------ADD SENDING TIMES-----------------\r\n");
-
-    status=overwrite_send_sched_config(SEND_SCHEDULER,SEND_SCHEDULER_SIZE);
+    #if(SEND_SCHEDULER)
+        status=overwrite_send_sched_config(SEND_SCHEDULER,SEND_SCHEDULER_SIZE);
+    #endif
+    #if(!SEND_SCHEDULER)
+        status=overwrite_send_sched_config(SEND_SCHEDULER,0);
+    #endif
     if(status != NODEFLOW_OK)
     {
         pc.printf("Error overwrite_send_sched_config: %i\r\n", status);
@@ -826,12 +836,16 @@ int NodeFlow::init_send_sched_config()
         pc.printf("Error read_send_sched_config: %i\r\n", status);
         return status;
     }
-
+    uint16_t send_sched_length;
+    uint16_t time_remainder=0;
     if(sendschedulerOn)
     {
-        for(int i=0; i<SEND_SCHEDULER_SIZE; i++)
-        {
-            uint16_t time_remainder=DIVIDE(((int(nbiot_send_scheduler[i]))*HOURINSEC)+((fmod(nbiot_send_scheduler[i],1))*6000)); 
+        read_send_sched_config(1,&send_sched_length);
+        for(int i=0; i<send_sched_length; i++)
+        {   
+            #if(SEND_SCHEDULER)
+                time_remainder=DIVIDE(((int(nbiot_send_scheduler[i]))*HOURINSEC)+((fmod(nbiot_send_scheduler[i],1))*6000));
+            #endif
             status=append_send_sched_config(time_remainder);
             if(status != NODEFLOW_OK)
             {
@@ -841,18 +855,18 @@ int NodeFlow::init_send_sched_config()
             pc.printf("%d. Sending ",i);
             timetodate(time_remainder*2);
         }
+       
     }
-    /**TODO: Send each time?! (Discuss) */
-     else
-    {   /**Periodically?! */
 
+    else
+    {  
         uint16_t sched_length;
         status=read_sched_config(1,&sched_length);
         if(status != NODEFLOW_OK)
-            {
-                pc.printf("Error read_sched_confi: %i\r\n", status);
-                return status;
-            }
+        {
+            pc.printf("Error read_sched_confi: %i\r\n", status);
+            return status;
+        }
         if(sched_length)
         {
             status=append_send_sched_config(scheduler[0]);
@@ -865,6 +879,7 @@ int NodeFlow::init_send_sched_config()
     }
 return status;
 }
+
 int NodeFlow::overwrite_send_sched_config(uint16_t code,uint16_t length)
 {
     SendSchedulerConfig ss_conf;
@@ -953,7 +968,6 @@ int NodeFlow::read_clock_synch_config(uint16_t* time, bool &clockSynchOn)
     return status;
 }
 
-//TODO: the read_sched_config and read_sched_group_id could be one 
 int NodeFlow::read_sched_config(int i, uint16_t* time_comparator)
 {
     SchedulerConfig r_conf;
@@ -967,6 +981,18 @@ int NodeFlow::read_sched_config(int i, uint16_t* time_comparator)
     return status;
 }
 
+int NodeFlow::read_sched_group_id(int i, uint8_t* group_id)
+{
+    SchedulerConfig r_conf;
+    status = DataManager::read_file_entry(SchedulerConfig_n, i, r_conf.data, sizeof(r_conf.parameters));
+    *group_id=r_conf.parameters.group_id;
+    if (status!=NODEFLOW_OK)
+    {
+        pc.printf("\nFailed to read scheduler %d",status);
+    }
+
+    return status;
+}
 
 /**Sets the flags, for just kicking the watchdog, sensing time,clock synch time, or sending time(NOT YET) */
 int NodeFlow:: set_flags_config(uint8_t ssck_flag)
@@ -1003,7 +1029,7 @@ int NodeFlow::set_wakeup_pin_flag(bool wakeup_pin)
 /**Ignore this for now 
  */
 int NodeFlow::add_sensing_groups() {
-    pc.printf("\r\n---------------ADD SENSING GROUPS-----------------\r\n");
+    pc.printf("\r\n---------------ADD METRIC GROUPS-----------------\r\n");
     sensor_config_init(SCHEDULER_SIZE);
     for (int i=0; i<SCHEDULER_SIZE; i++)
     {
@@ -1089,8 +1115,8 @@ int NodeFlow::set_scheduler(uint32_t* next_timediff)
     uint32_t next_sch_time=0;
     uint32_t scheduled_times=0;
     uint16_t times;
-    uint16_t group_id=0;
-    uint16_t temp_group_id=0;
+    uint8_t group_id=0;
+    uint8_t temp_group_id=0;
     if(schedulerOn)
     {
         for (int i=0; i<length; i++)
@@ -1115,17 +1141,22 @@ int NodeFlow::set_scheduler(uint32_t* next_timediff)
             {
                 if (timediff < timediff_temp)
                 {
-                    read_sched_config(i+2,&group_id); 
+                    read_sched_group_id(i+2,&group_id);
+                    
 
                 }
                 if (timediff == timediff_temp)
                 {
-                    read_sched_config(i+2,&temp_group_id);
-                    group_id=group_id+temp_group_id;             
+                    read_sched_group_id(i+2,&temp_group_id);
+                    if(temp_group_id!=group_id)
+                    {
+                         group_id=group_id+temp_group_id;
+                    }             
                 }
                 
                 timediff_temp=timediff; //holds the smallest different form time_now
                 next_sch_time=scheduled_times;
+                
                 status=overwrite_metric_flags(group_id);
                 if(status != NODEFLOW_OK)
                 {
@@ -1134,6 +1165,7 @@ int NodeFlow::set_scheduler(uint32_t* next_timediff)
                 }
             }  
         }
+        pc.printf("Group id:  %d\r\n",group_id);
         pc.printf("Next Sensing ");
         timetodate(next_sch_time);
        
@@ -1154,13 +1186,11 @@ int NodeFlow::set_scheduler(uint32_t* next_timediff)
        set_reading_time(&timediff_temp);  
     } 
     ssck_flag.set(0);
-    /**TODO: check if it works */
+  
     #if BOARD == EARHART_V1_0_0
-    //send=true;
-    ssck_flag.set(1);
+        ssck_flag.set(1);
     #endif
-    //TODO: only for nbiot
-    //#if BOARD == WRIGHT_V1_0_0
+
     if(sendschedulerOn)
     {
         uint16_t send_length;
@@ -1266,7 +1296,7 @@ int NodeFlow::set_scheduler(uint32_t* next_timediff)
     pc.printf("\r\nSense flag: %d, Send flag: %d,Clock: %d, Kick flag: %d,\n", ssck_flag.test(0), ssck_flag.test(1), ssck_flag.test(2), ssck_flag.test(3));
     ThisThread::sleep_for(100);
     set_flags_config(mybit_int);
-    ovewrite_wakeup_timestamp(timediff_temp); //
+    ovewrite_wakeup_timestamp(timediff_temp); 
 
     *next_timediff=timediff_temp;
     return NODEFLOW_OK;   
@@ -1412,7 +1442,6 @@ int NodeFlow::set_reading_time(uint32_t* time)
             status=DataManager::append_file_entry(TempSensingGroupConfig_n, ts_conf.data, sizeof(ts_conf.parameters));
             if(status != NODEFLOW_OK)
             {
-                /**TODO: FAILS Occasionaly */
                 status=DataManager::append_file_entry(TempSensingGroupConfig_n, ts_conf.data, sizeof(ts_conf.parameters));
                 pc.printf("Error write temp sensor config. status: %i\r\n", status);
                 return status;
@@ -1423,8 +1452,8 @@ int NodeFlow::set_reading_time(uint32_t* time)
     pc.printf("\r\nNext Reading ");
     timetodate(time_comparator+time_now());
     pc.printf("GroupA: %d, GroupB: %d, GroupC: %d, GroupD: %d\n", flags.test(0), flags.test(1), flags.test(2), flags.test(3));
-    //pc.printf("--------------------------------------------------\r\n");
     *time=time_comparator;
+
     return status;
 }
 int NodeFlow::overwrite_metric_flags(uint8_t mybit_int)
@@ -1434,7 +1463,6 @@ int NodeFlow::overwrite_metric_flags(uint8_t mybit_int)
     status=DataManager::overwrite_file_entries(MetricGroupConfig_n, mg_conf.data, sizeof(mg_conf.parameters));
     if(status != NODEFLOW_OK)
     {   
-        /**TODO: SOLUTION for occasionaly failing to overwrite (not just here) */
         status=DataManager::overwrite_file_entries(MetricGroupConfig_n, mg_conf.data, sizeof(mg_conf.parameters));
         pc.printf("Error metric flag config. status: %i\r\n", status);
         return status;
@@ -1487,7 +1515,8 @@ int NodeFlow::ovewrite_wakeup_timestamp(uint16_t time_remainder){
     * 
 
  */
-int NodeFlow::get_timestamp(){
+int NodeFlow::get_timestamp()
+{
    #if BOARD == EARHART_V1_0_0
         int retcode=lpwan.join(CLASS_A);
         if(retcode<0)
@@ -1495,9 +1524,11 @@ int NodeFlow::get_timestamp(){
             pc.printf("Failed to join :%d\r\n",retcode);
             return retcode;
         }
+        uint32_t rx_unix_timestamp=0;
         int64_t timestamp=0;
         uint8_t dummy[1]={1};
         uint8_t port=0;
+        uint32_t rx_dec_buffer[MAX_BUFFER_READING_TIMES];
         pc.printf("Horrayy,setting the time, bear with me\r\nRetries are set to %d\r\n",MAX_RETRY_CLOCK_SYNCH);
         retcode=lpwan.send_message(223, dummy, sizeof(dummy));
 
@@ -1506,7 +1537,9 @@ int NodeFlow::get_timestamp(){
             pc.printf("Failed to send\r\n");
             return retcode;
         }
-        lpwan.receive_message(false);
+        
+        lpwan.receive_message(rx_dec_buffer,&port,&retcode);
+        port=0;
         ThisThread::sleep_for(1000);
         for(int i=0; ((port!=CLOCK_SYNCH_PORT) && (i<MAX_RETRY_CLOCK_SYNCH));i++) 
         {
@@ -1517,8 +1550,16 @@ int NodeFlow::get_timestamp(){
             {
                 pc.printf("Failed to send\r\n");
             }
-            timestamp=lpwan.receive_message(false).received_value[0];
-            port=lpwan.receive_message(true).port;
+            lpwan.receive_message(rx_dec_buffer,&port,&retcode);
+            if(port == CLOCK_SYNCH_PORT)
+            {
+                time_t time_now=time(NULL);
+                if (rx_dec_buffer[0]>time_now)
+                {
+                    pc.printf("Received value: %d\r\n",rx_dec_buffer[0]);
+                    set_time(rx_dec_buffer[0]);
+                }
+            }
         }
     
     #endif /* BOARD == EARHART_V1_0_0 */
@@ -1575,32 +1616,30 @@ int NodeFlow::sendTTN(uint8_t port, uint8_t payload[], uint16_t length)
     pc.printf("\r\n--------------------------------------------------\r\n");
     return status;
 }
-/**TODO: CHECK if the rx_message is greater than uint32 or less */
+
 int NodeFlow::receiveTTN(uint32_t* rx_message, uint8_t* rx_port)
-{
-    uint16_t decValue=lpwan.receive_message(false).received_value[0]; 
-    uint8_t port=lpwan.receive_message(true).port;
+{   uint8_t port=0;
+    int retcode=0;
+    uint32_t rx_dec_buffer[MAX_BUFFER_READING_TIMES];
+    lpwan.receive_message(rx_dec_buffer,&port,&retcode); 
+    
     if (port==SCHEDULER_PORT)
     {
-        uint8_t retcode=lpwan.receive_message(true).retcode;
         status=overwrite_sched_config(true, DIVIDE(retcode));
         if (status != NODEFLOW_OK)
         {
             pc.printf("\r\nError overwrite_sched_config from server %d",status);
             return status;
-            //TODO: it should retry? send a message to server?
         }
 
         for (int i=0; i<DIVIDE(retcode); i++)
         {
-            decValue=lpwan.receive_message(true).received_value[i];
-            pc.printf("%i.RX scheduler: %d(10)\r\n",i, decValue);
-            status=append_sched_config(decValue,1); //TODO: CHANGE GROUP ID- depends on data
+            pc.printf("%i.RX scheduler: %d(10)\r\n",i, rx_dec_buffer[i]);
+            status=append_sched_config(rx_dec_buffer[i]/2,1); //TODO: CHANGE GROUP ID- depends on data
             if (status != NODEFLOW_OK)
             {
                 pc.printf("\r\nError append_sched_config from server %d",status);
                 return status;
-                //TODO: it should retry? send a message to server?
             }
         }
     }
@@ -1609,7 +1648,6 @@ int NodeFlow::receiveTTN(uint32_t* rx_message, uint8_t* rx_port)
     {
         bool clockSynchOn=false;
         uint16_t time;
-        uint8_t retcode=lpwan.receive_message(true).retcode;
         status=read_clock_synch_config(&time,clockSynchOn);
         if (status != NODEFLOW_OK)
             {
@@ -1618,7 +1656,7 @@ int NodeFlow::receiveTTN(uint32_t* rx_message, uint8_t* rx_port)
             }
         if(retcode==1 && clockSynchOn)
         {
-            status=overwrite_clock_synch_config(decValue,false);
+            status=overwrite_clock_synch_config(rx_dec_buffer[0]/2,false);
             if (status != NODEFLOW_OK)
             {
                 pc.printf("Clock Config failed to overwrite: %i\r\n", status);
@@ -1628,7 +1666,7 @@ int NodeFlow::receiveTTN(uint32_t* rx_message, uint8_t* rx_port)
         }
         else
         {
-            status=overwrite_clock_synch_config(decValue,true);
+            status=overwrite_clock_synch_config(rx_dec_buffer[0]/2,true);
             if (status != NODEFLOW_OK)
             {
                 pc.printf("Clock Config failed to overwrite: %i\r\n", status);
@@ -1642,11 +1680,11 @@ int NodeFlow::receiveTTN(uint32_t* rx_message, uint8_t* rx_port)
     }
     else
     {
-        pc.printf("Rx: %d(10)\r\n", decValue);
+        pc.printf("Rx: %d(10)\r\n", rx_dec_buffer[0]);
         pc.printf("Port: %d\r\n", port);
     }
     lpwan.sleep();
-    *rx_message=decValue;
+    *rx_message=rx_dec_buffer[0];
     *rx_port=port;
     
     return status;
@@ -1701,7 +1739,7 @@ int NodeFlow::get_flags()
         return NodeFlow::FLAG_SENDING;
     }
 
-    return NodeFlow::FLAG_SENDING; //TODO: in case it fails?!
+    return NodeFlow::FLAG_SENDING; 
 }
 
 int NodeFlow::delay_pin_wakeup()
@@ -1724,7 +1762,6 @@ int NodeFlow::delay_pin_wakeup()
  */
 int NodeFlow::_clear_after_send()
 {
-    //TODO: clear EEPROM after sending Succesfully
     SensorDataConfig sd_conf;
     sd_conf.parameters.byte=0;
     status= DataManager::delete_file_entries(SensorDataConfig_n);

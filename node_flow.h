@@ -306,15 +306,13 @@ class NodeFlow: public DataManager
          *  to interact with the sensors.
          */  
         virtual void MetricGroupA() = 0; 
-        #if (SCHEDULER_B)
+       
         virtual void MetricGroupB() = 0;
-        #endif 
-        #if (SCHEDULER_C)
+      
         virtual void MetricGroupC() = 0;
-        #endif
-        #if (SCHEDULER_D)
+    
         virtual void MetricGroupD() = 0;
-        #endif
+    
         /** Virtual functions END ************************************************************************************/
 
         
@@ -450,7 +448,7 @@ class NodeFlow: public DataManager
          *                                       
          */ 
         int read_sched_config(int i,uint16_t* time_comparator);
-
+        int read_sched_group_id(int i,uint8_t* time_comparator);
         /** Overwrite the Scheduler holds the length and group id for each specific time. 
          *                                      
          */ 
@@ -499,10 +497,10 @@ class NodeFlow: public DataManager
          */
         int read_clock_synch_config(uint16_t* time,bool &clockSynchOn);
 
-       
         /** Set flags for the next wake up
          */
         int get_flags();
+
         int set_flags_config(uint8_t ssck_flag);
         int set_wakeup_pin_flag(bool wakeup_pin);
         int overwrite_metric_flags(uint8_t mybit_int);
