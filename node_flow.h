@@ -1,7 +1,7 @@
 /**
  ******************************************************************************
  * @file    NodeFLow.h
- * @version 1.1.0
+ * @version 0.3.0
  * @author  Rafaella Nofytou,  Adam Mitchell
  * @brief   Header file of the Wright || Earheart node from Think Pilot. 
  * Handles sleeping times/ eeprom driver/ lorawan/ nb-iot communication
@@ -18,6 +18,12 @@
 #include "tp_sleep_manager.h"
 #include <bitset>
 
+#include "platform/mbed_assert.h"
+#include "platform/mbed_debug.h"
+#include "platform/mbed_error.h"
+#include "platform/mbed_stats.h"
+
+extern Serial pc;
 
 #if BOARD == EARHART_V1_0_0
     #include "LorawanTP.h"
@@ -38,6 +44,28 @@
 #define HOURINSEC   3600
 #define MINUTEINSEC 60
 
+/**DEFINE RETRIES FOR SENDING*/
+#define MAX_SEND_RETRIES 3
+#define MAX_OVERWRITE_RETRIES 3
+
+#if (SCHEDULER)
+    #define SCHEDULER_SIZE (SCHEDULER_A_SIZE + SCHEDULER_B_SIZE + SCHEDULER_C_SIZE + SCHEDULER_D_SIZE)
+    extern float scheduler[]; 
+    extern float schedulerA[];
+    extern float schedulerB[];
+    extern float schedulerC[];
+    extern float schedulerD[];
+#endif
+
+#if(!SCHEDULER)
+    extern float scheduler[]; //CHANGE TO INTERVALS
+#endif
+
+#if(SEND_SCHEDULER)
+     extern float nbiot_send_scheduler[];
+#endif
+
+#define MAX_BUFFER_SENDING_TIMES 10
 /** Eeprom configuration. 
  *
  * @param DeviceConfig. Device specifics- send with the message payload.
@@ -209,6 +237,16 @@ union TimeConfig
 };
 
 
+union ErrorConfig
+{
+    struct 
+    {
+        uint16_t errCnt;
+    } parameters;
+
+    char data[sizeof(ErrorConfig::parameters)];
+};
+
 /** Each filename in the eeprom hold a unique number
  */
 enum Filenames
@@ -224,7 +262,8 @@ enum Filenames
     TempSensingGroupConfig_n    = 8,
     NextTimeConfig_n            = 9,
     SendSchedulerConfig_n       = 10,
-    MetricGroupConfig_n         = 11
+    MetricGroupConfig_n         = 11,
+    ErrorConfig_n               = 12
  };
 
 /** Nodeflow Class
@@ -339,6 +378,7 @@ class NodeFlow: public DataManager
          *@param increment_value increment_value
          */
         int read_increment(int *increment_value);
+        
 
     private:
 
@@ -601,12 +641,18 @@ class NodeFlow: public DataManager
             TP_NBIoT_Interface _radio;
             Comms_Radio_Stack _comms_stack = Comms_Radio_Stack::NBIOT;
         #elif BOARD == EARHART_V1_0_0
-            LorawanTP lpwan;
-            /* Instantiate LoRa _radio object here */
+            LorawanTP _radio;
             Comms_Radio_Stack _comms_stack = Comms_Radio_Stack::LORA;
         #else 
             Comms_Radio_Stack _comms_stack = Comms_Radio_Stack::UNDEFINED;
         #endif /* #if BOARD == ... */
+
+        void ErrorHandler(int line, const char* str1, int status, const char* str2);
+        /**Read current error increment value.
+         * 
+         *@param increment_value increment_value
+         */
+        void error_increment(int *errCnt);
 
 /**Critical errors that the device will need to reset if happens */
     enum

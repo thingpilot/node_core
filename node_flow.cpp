@@ -1,7 +1,7 @@
 /**
  ******************************************************************************
  * @file    NodeFlow.cpp
- * @version 0.1.0
+ * @version 0.3.0
  * @author  Rafaella Neofytou, Adam Mitchell
  * @brief   C++ file of the Wright || Earheart node from Think Pilot. 
  ******************************************************************************
@@ -11,7 +11,6 @@
  */
 #include "node_flow.h"
 
-Serial pc(TP_PC_TXU, TP_PC_RXU);
 
 /**Initialise the wakeup flag as UNKNOWN
  */
@@ -19,8 +18,9 @@ int flags=NodeFlow::FLAG_UNKNOWN;
 int status = -1;
 int written_entries=0;
 #if(SCHEDULER)
-float scheduler[1];
+    float scheduler[1];
 #endif
+
 
 /** Constructor. Create a NodeFlow interface, connected to the pins specified 
  *  operating at the specified frequency
@@ -33,7 +33,7 @@ float scheduler[1];
 NodeFlow::NodeFlow(PinName write_control, PinName sda, PinName scl, int frequency_hz,PinName mosi,PinName miso,PinName sclk,PinName nss,
                    PinName reset,PinName dio0,PinName dio1,PinName dio2,PinName dio3,PinName dio4,PinName dio5,PinName rf_switch_ctl1,
                    PinName rf_switch_ctl2,PinName txctl,PinName rxctl,PinName ant_switch,PinName pwr_amp_ctl,PinName tcxo, PinName done): 
-                   DataManager(write_control, sda, scl, frequency_hz), lpwan(mosi, miso, sclk, nss, reset, dio0, dio1, 
+                   DataManager(write_control, sda, scl, frequency_hz), _radio(mosi, miso, sclk, nss, reset, dio0, dio1, 
                    dio2,dio3,dio4,dio5,rf_switch_ctl1,rf_switch_ctl2,txctl,rxctl,ant_switch,pwr_amp_ctl,tcxo),watchdog(done)
 {
 
@@ -84,14 +84,13 @@ void NodeFlow::start()
     TP_Sleep_Manager::WakeupType_t wkp = sleep_manager.get_wakeup_type();
 
     if(wkp==TP_Sleep_Manager::WakeupType_t::WAKEUP_PIN)
-    {  
+    {   
         pc.printf("\r\n--------------------PIN WAKEUP--------------------\r\n");
         HandleInterrupt(); /**Pure virtual function */
-
         status=get_interrupt_latency(&next_time);
         if (status != NODEFLOW_OK)
         {
-            pc.printf("Error read_file_entry NextTimeConfig. status: %i\r\n", status);
+            ErrorHandler(__LINE__,"get_interrupt_latency", status,__PRETTY_FUNCTION__);
         }
 
         if(next_time>INTERRUPT_DELAY)
@@ -100,7 +99,7 @@ void NodeFlow::start()
             status=set_wakeup_pin_flag(true);
             if (status != NODEFLOW_OK)
             {
-                pc.printf("Error set_wakeup_pin_flag. status: %i\r\n", status);
+                ErrorHandler(__LINE__,"set_wakeup_pin_flag", status,__PRETTY_FUNCTION__);
             }
         }
         
@@ -115,13 +114,13 @@ void NodeFlow::start()
             status=set_wakeup_pin_flag(false);
             if (status != NODEFLOW_OK)
             {
-                pc.printf("Error set_wakeup_pin_flag. status: %i\r\n", status);
+                ErrorHandler(__LINE__,"set_wakeup_pin_flag", status,__PRETTY_FUNCTION__);
             }
 
             status=get_interrupt_latency(&next_time);
             if (status != NODEFLOW_OK)
             {
-                pc.printf("Error read_file_entry NextTimeConfig. status: %i\r\n", status);
+                ErrorHandler(__LINE__,"get_interrupt_latency", status,__PRETTY_FUNCTION__);
             }
         }
         else
@@ -132,17 +131,16 @@ void NodeFlow::start()
             status=set_scheduler(&next_time);
             if (status != NODEFLOW_OK)
             {
-                pc.printf("Error set_scheduler. status: %i\r\n", status);
+                ErrorHandler(__LINE__,"set_scheduler", status,__PRETTY_FUNCTION__);
             }
            
         }
          
     }
-    else if(wkp==TP_Sleep_Manager::WakeupType_t::WAKEUP_RESET) 
+    else if(wkp==TP_Sleep_Manager::WakeupType_t::WAKEUP_RESET || wkp==TP_Sleep_Manager::WakeupType_t::WAKEUP_SOFTWARE) 
     {
         pc.printf("\r\n                      __|__       \n               --@--@--(_)--@--@--\n-------------------THING PILOT--------------------\r\n");
         pc.printf("\nDevice Unique ID: %08X %08X %08X \r", STM32_UID[0], STM32_UID[1], STM32_UID[2]);
-
         status=initialise();
         if (initialise() != NODEFLOW_OK)
         { 
@@ -153,16 +151,17 @@ void NodeFlow::start()
         #endif
          
         setup(); /**Pure virtual by the user */
-        
+       
         if(CLOCK_SYNCH)
         {
             get_timestamp();
-            timetodate(time_now()); 
+           
         }
+        timetodate(time_now()); 
         status=init_sched_config();
         if (status!=NODEFLOW_OK)
         {
-            pc.printf("Error init_sched_config. status: %i\r\n", status);
+            ErrorHandler(__LINE__,"init_sched_config", status,__PRETTY_FUNCTION__);
         }
 
         #if(SEND_SCHEDULER)
@@ -170,14 +169,14 @@ void NodeFlow::start()
             
             if (status!=NODEFLOW_OK)
             {
-                pc.printf("Error init_send_sched_config. status: %i\r\n", status);
+                ErrorHandler(__LINE__,"init_send_sched_config", status,__PRETTY_FUNCTION__);
             }   
         #endif
         flags=get_flags();
         status=set_scheduler(&next_time); 
         if (status!=NODEFLOW_OK)
         {
-            pc.printf("Error set_scheduler. status: %i\r\n", status);
+            ErrorHandler(__LINE__,"set_scheduler", status,__PRETTY_FUNCTION__);
         }  
          
     }
@@ -194,7 +193,7 @@ int NodeFlow::initialise()
     status=DataManager::init_filesystem();
     if(status != NODEFLOW_OK)
     {
-       pc.printf("Filesystem initialisation failed. status: %i\r\n", status);
+       ErrorHandler(__LINE__,"init_filesystem", status,__PRETTY_FUNCTION__);
        return DATA_MANAGER_FAIL;
     }
 
@@ -202,35 +201,27 @@ int NodeFlow::initialise()
     status=DataManager::is_initialised(initialised);
     if(status != NODEFLOW_OK)
     {
-       pc.printf("Filesystem initialisation failed. status: %i\r\n", status);
+       ErrorHandler(__LINE__,"is_initialised", status,__PRETTY_FUNCTION__);
        return DATA_MANAGER_FAIL;
     }
 
-    // /** DeviceConfig */ //TODO: CHECK IF WE NEED THIS
-    // DataManager_FileSystem::File_t DeviceConfig_File_t;
-    // DeviceConfig_File_t.parameters.filename = DeviceConfig_n;
-    // DeviceConfig_File_t.parameters.length_bytes = sizeof( DeviceConfig::parameters);
+    DataManager_FileSystem::File_t ErrorConfig_File_t;
+    ErrorConfig_File_t.parameters.filename = ErrorConfig_n;
+    ErrorConfig_File_t.parameters.length_bytes = sizeof(ErrorConfig::parameters);
 
-    // status=DataManager::add_file(DeviceConfig_File_t, 1); 
-    // if(status != NODEFLOW_OK)
-    // {
-    //     pc.printf("Device Config failed: %i\r\n", status); 
-    //     return status;  
-    // }
-    // DeviceConfig w_conf;
-    // w_conf.parameters.device_sn = STM32_UID[0];
-    // #if BOARD == WRIGHT_V1_0_0
-    //     w_conf.parameters.modulation =0;
-    // #endif
-    // #if BOARD == EARHART_V1_0_0
-    //     w_conf.parameters.modulation =1;
-    // #endif
-    // status = DataManager::append_file_entry(DeviceConfig_n, w_conf.data, sizeof(w_conf.parameters));
-    // if(status != NODEFLOW_OK)
-    // {
-    //     pc.printf("DeviceConfig error: %i status: %i\r\n", 0, status);
-    //     return status; 
-    // }
+    status=DataManager::add_file(ErrorConfig_File_t, 1); 
+    if(status != NODEFLOW_OK)
+    {
+        return status;
+    }
+    ErrorConfig e_conf;
+    e_conf.parameters.errCnt=0;
+    status= DataManager::overwrite_file_entries(ErrorConfig_n, e_conf.data, sizeof(e_conf.parameters));
+    if (status != NODEFLOW_OK)
+    {
+        ErrorHandler(__LINE__,"ERROR IN ERROR OH SHIT",status,__PRETTY_FUNCTION__); 
+        return status;    
+    }
 
     /** SchedulerConfig */
     DataManager_FileSystem::File_t SchedulerConfig_File_t;
@@ -240,7 +231,7 @@ int NodeFlow::initialise()
     status=DataManager::add_file(SchedulerConfig_File_t, MAX_BUFFER_READING_TIMES+2); 
     if(status != NODEFLOW_OK)
     {
-        pc.printf("Scheduler Config failed: %i\r\n", status);
+        ErrorHandler(__LINE__,"SchedulerConfig",status,__PRETTY_FUNCTION__);
         return status;   
     }
 
@@ -249,7 +240,7 @@ int NodeFlow::initialise()
     status= DataManager::overwrite_file_entries(SchedulerConfig_n, s_conf.data, sizeof(s_conf.parameters));
     if (status != NODEFLOW_OK)
     {
-        pc.printf("Schedulerrr: %i\r\n", status);  
+        ErrorHandler(__LINE__,"SchedulerConfig",status,__PRETTY_FUNCTION__); 
         return status;    
     }
 
@@ -266,7 +257,7 @@ int NodeFlow::initialise()
     #endif
     if(status != NODEFLOW_OK)
     {
-        pc.printf("Send Scheduler Config failed: %i\r\n", status);
+        ErrorHandler(__LINE__,"SendSchedulerConfig",status,__PRETTY_FUNCTION__);
         return status;   
     }
 
@@ -275,7 +266,7 @@ int NodeFlow::initialise()
     status= DataManager::overwrite_file_entries(SendSchedulerConfig_n, ss_conf.data, sizeof(ss_conf.parameters));
     if (status != NODEFLOW_OK)
     {
-        pc.printf("Send Scheduler error: %i\r\n", status);  
+        ErrorHandler(__LINE__,"SendSchedulerConfig",status,__PRETTY_FUNCTION__);  
         return status;    
     }
     
@@ -288,7 +279,7 @@ int NodeFlow::initialise()
     status=DataManager::add_file(ClockSynchConfig_File_t, 1); 
     if(status != NODEFLOW_OK)
     {
-        pc.printf("ClockSynchConfig failed: %i\r\n", status);
+        ErrorHandler(__LINE__,"ClockSynchConfig",status,__PRETTY_FUNCTION__);
         return status;   
     }
     #if (CLOCK_SYNCH)
@@ -299,7 +290,7 @@ int NodeFlow::initialise()
     #endif
     if (status != NODEFLOW_OK)
     {
-        pc.printf("Clock Config failed to overwrite: %i\r\n", status);
+        ErrorHandler(__LINE__,"Overwrite_clock_synch_config",status,__PRETTY_FUNCTION__);
         return status;
     }   
    
@@ -312,7 +303,7 @@ int NodeFlow::initialise()
     status=DataManager::add_file(FlagsConfig_File_t, 1);
     if(status != NODEFLOW_OK)
     {
-        pc.printf("FLAGS Config failed: %i\r\n", status);
+        ErrorHandler(__LINE__,"FlagsConfig",status,__PRETTY_FUNCTION__);
         return status;   
     }
 
@@ -327,7 +318,7 @@ int NodeFlow::initialise()
     status=DataManager::add_file(IncrementConfig_File_t, 1);
     if(status != NODEFLOW_OK)
     {
-        pc.printf("FLAGS Config failed: %i\r\n", status);
+        ErrorHandler(__LINE__,"IncrementConfig",status,__PRETTY_FUNCTION__);
         return status;   
     }
 
@@ -337,7 +328,7 @@ int NodeFlow::initialise()
     status= DataManager::append_file_entry(IncrementConfig_n, i_conf.data, sizeof(i_conf.parameters));
     if(status != NODEFLOW_OK)
     {
-        pc.printf("IncrementConfig failed to overwrite: %i\r\n", status);
+        ErrorHandler(__LINE__,"IncrementConfig",status,__PRETTY_FUNCTION__);
         return status; 
     }
 
@@ -348,7 +339,7 @@ int NodeFlow::initialise()
     status=DataManager::add_file(NextTimeConfig_File_t, 1);
     if(status != NODEFLOW_OK)
     {
-        pc.printf("Next time Config failed: %i\r\n", status);
+        ErrorHandler(__LINE__,"NextTimeConfig",status,__PRETTY_FUNCTION__);
         return status;   
     }
 
@@ -359,7 +350,7 @@ int NodeFlow::initialise()
     status = DataManager::add_file(MetricGroupConfig_File_t, 1);
     if(status != NODEFLOW_OK)
     {
-        pc.printf("Metric file failed: %i\r\n", status);
+        ErrorHandler(__LINE__,"MetricGroupConfig",status,__PRETTY_FUNCTION__);
         return status;
     }
 
@@ -370,7 +361,7 @@ int NodeFlow::initialise()
     status = DataManager::add_file(SensorDataConfig_File_t, 10*MAX_BUFFER_READING_TIMES); //TODO: what is the maximum size supported?!
     if(status != NODEFLOW_OK)
     {
-        pc.printf("Metric file failed: %i\r\n", status);
+        ErrorHandler(__LINE__,"SensorDataConfig",status,__PRETTY_FUNCTION__);
         return status;
     }
        
@@ -383,7 +374,7 @@ int NodeFlow::HandleModem()
     status=read_sched_config(1,&sched_length);
     if (status!=NODEFLOW_OK)
     {
-        pc.printf("\nFailed to read sched_length %d\r\n",status);
+        ErrorHandler(__LINE__,"read_sched_config",status,__PRETTY_FUNCTION__);
         return status;
     }
 
@@ -429,7 +420,7 @@ int NodeFlow::HandleModem()
         status= DataManager::get_total_written_file_entries(SensorDataConfig_n, written_entries);
         if(status != NODEFLOW_OK)
         {
-            pc.printf("Get_total_written_file_entries failed: %i\r\n", status);
+            ErrorHandler(__LINE__,"get_total_written_file_entries",status,__PRETTY_FUNCTION__);
             return status;
         }
 
@@ -452,26 +443,35 @@ int NodeFlow::HandleModem()
         /**TODO: NBIOT send */
         #if BOARD == WRIGHT_V1_0_0
             memcpy(nbiot_payload+4,payload,written_entries); /*Adds a part of the serial number 4 bytes*/
-            pc.printf("NBIOT Buffer(LSB)  = 0x");
+            pc.printf("\r\nNBIOT Buffer(LSB)  = 0x");
             for (int i=0; i<written_entries+4; i++) 
             {
                 pc.printf(" %02x",nbiot_payload[i]);   
             }
-            printf("\r\n");
+            pc.printf("\r\n");
             //TODO: CHECK WITH NBIOT
             char recv_data[512];
             
-            _radio.coap_post(nbiot_payload, recv_data, SaraN2::TEXT_PLAIN, &response_code);
+            status=_radio.coap_post((char*)nbiot_payload, recv_data, SaraN2::TEXT_PLAIN, response_code);
+            if (response_code != 0 || response_code != 2 ) //TODO: Check
+            {
+                 ErrorHandler(__LINE__,"Error Sending NBIOT",status,__PRETTY_FUNCTION__); //TODO: remove that as an error because it will restart
+            } 
+            else
+            {
+                _clear_after_send();
+            }
         #endif
 
         #if BOARD == EARHART_V1_0_0
             response_code=sendTTN(1, payload, written_entries);
+            if (response_code > NODEFLOW_OK) 
+            {
+                _clear_after_send();
+            } 
         #endif 
 
-        // if (response_code > NODEFLOW_OK) //TODO: wahts the response code?
-        // {
-            _clear_after_send();
-        // }   
+         
     }
 
     return NODEFLOW_OK;
@@ -495,20 +495,20 @@ void NodeFlow::add_record(DataType data)
             *(time_t *)(time_bytes)=time_now;
             for (int i=0; i<4; i++)
             {
-                printf("[ 0x%.2x]", time_bytes[i]);
+                pc.printf("[ 0x%.2x]", time_bytes[i]);
                 add_sensing_entry(time_bytes[i]);
             }
-        printf("\r\n");
+        pc.printf("\r\n");
         #endif
         written_entries=5;
     }
-    printf("Bytes = ");
+    pc.printf("Bytes = ");
     for (int i=0; i<sizeof(DataType); i++)
     {
-        printf("[ 0x%.2x]", bytes[i]);
+        pc.printf("[ 0x%.2x]", bytes[i]);
         add_sensing_entry(bytes[i]);
     }
-    printf("\r\n");
+    pc.printf("\r\n");
 }
 
 template void NodeFlow::add_record<float>(float data);
@@ -529,7 +529,7 @@ int NodeFlow::add_sensing_entry(uint8_t value)
     if(status != NODEFLOW_OK)
     {
         status= DataManager::append_file_entry(SensorDataConfig_n, t_conf.data, sizeof(t_conf.parameters));
-        pc.printf("SensorDataConfig failed to append: %i\r\n", status);
+        ErrorHandler(__LINE__,"SensorDataConfig",status,__PRETTY_FUNCTION__);
     }
     return status;
 }
@@ -544,7 +544,7 @@ int NodeFlow::read_increment(int *increment_value)
     status = DataManager::read_file_entry(IncrementConfig_n, 0, i_conf.data, sizeof(i_conf.parameters));
     if (status != NODEFLOW_OK)
     {
-        pc.printf("IncrementConfig failed to read: %i\r\n", status);   
+        ErrorHandler(__LINE__,"IncrementConfig",status,__PRETTY_FUNCTION__);   
     }
     *increment_value=i_conf.parameters.increment;
 
@@ -562,7 +562,7 @@ int NodeFlow::increment(int i)
         status= DataManager::overwrite_file_entries(IncrementConfig_n, i_conf.data, sizeof(i_conf.parameters));
         if (status!=NODEFLOW_OK)
         {
-            pc.printf("IncrementConfig failed to overwrite: %i\r\n", status); 
+            ErrorHandler(__LINE__,"IncrementConfig",status,__PRETTY_FUNCTION__); 
         }
     }
     return status;
@@ -576,7 +576,7 @@ int NodeFlow::_clear_increment()
     status= DataManager::overwrite_file_entries(IncrementConfig_n, i_conf.data, sizeof(i_conf.parameters));
     if (status!=NODEFLOW_OK)
     {
-        pc.printf("IncrementConfig failed to overwrite: %i\r\n", status);   
+        ErrorHandler(__LINE__,"IncrementConfig",status,__PRETTY_FUNCTION__);   
     }
     return status;
 }
@@ -590,7 +590,7 @@ int NodeFlow::sensor_config_init(int length)
     status=DataManager::add_file(SensingGroupConfig_File_t, length);
     if (status != NODEFLOW_OK) 
     {
-        pc.printf("Add file SensingGroupConfig failed: %i\r\n", status);
+        ErrorHandler(__LINE__,"SensingGroupConfig",status,__PRETTY_FUNCTION__);
         return status; 
     }
     
@@ -601,7 +601,7 @@ int NodeFlow::sensor_config_init(int length)
     status = DataManager::add_file(TempSensingGroupConfig_File_t, length);
     if(status!=NODEFLOW_OK)
     {
-        pc.printf("Add file TempSensingGroupConfig failed: %i\r\n", status);
+        ErrorHandler(__LINE__,"TempSensingGroupConfig",status,__PRETTY_FUNCTION__);
         return status;
     }
 
@@ -621,7 +621,7 @@ int NodeFlow::time_config_init()
     status = DataManager::add_file(TimeConfig_File_t, 1);
     if(status != NODEFLOW_OK)
     {
-        pc.printf("Time Config failed: %i\r\n", status);  
+        ErrorHandler(__LINE__,"TimeConfig",status,__PRETTY_FUNCTION__);  
         return status;
     }
     
@@ -638,7 +638,7 @@ int NodeFlow::set_time_config(int time_comparator)
     status= DataManager::overwrite_file_entries(TimeConfig_n, t_conf.data, sizeof(t_conf.parameters));
     if (status != NODEFLOW_OK)
     {
-        pc.printf("TimeConfig failed to overwrite: %i\r\n", status);
+        ErrorHandler(__LINE__,"TimeConfig",status,__PRETTY_FUNCTION__);
     }
     
     return status;
@@ -650,6 +650,14 @@ int NodeFlow::set_time_config(int time_comparator)
  */ 
 int NodeFlow::init_sched_config()
 {
+    #if(!SCHEDULER)
+        if(SCHEDULER_SIZE>4)
+        {
+            pc.printf("\nWARNING!! Scheduler size too big,\nonly 1 interval time is associated with each metric group\n");
+            #define SCHEDULER_SIZE 4 
+        }
+         
+    #endif
     status=overwrite_sched_config(SCHEDULER,SCHEDULER_SIZE);
     while (status != NODEFLOW_OK)
     {
@@ -666,7 +674,7 @@ int NodeFlow::init_sched_config()
                 status=timetoseconds(schedulerA[i],1);
                 if(status != NODEFLOW_OK)
                 {
-                    pc.printf("timetoseconds error: %i\r\n", status);
+                    ErrorHandler(__LINE__,"timetoseconds",status,__PRETTY_FUNCTION__);
                     return status;
                 }
 
@@ -679,7 +687,7 @@ int NodeFlow::init_sched_config()
                 status=timetoseconds(schedulerB[i],2);
                 if(status != NODEFLOW_OK)
                 {
-                    pc.printf("timetoseconds error: %i\r\n", status);
+                    ErrorHandler(__LINE__,"timetoseconds",status,__PRETTY_FUNCTION__);
                     return status;
                 }
             }      
@@ -691,7 +699,7 @@ int NodeFlow::init_sched_config()
                 status=timetoseconds(schedulerC[i],4);
                 if(status != NODEFLOW_OK)
                 {
-                    pc.printf("timetoseconds error: %i\r\n", status);
+                    ErrorHandler(__LINE__,"timetoseconds",status,__PRETTY_FUNCTION__);
                     return status;
                 }
             }
@@ -704,7 +712,7 @@ int NodeFlow::init_sched_config()
                 status=timetoseconds(schedulerD[i],8);
                 if(status != NODEFLOW_OK)
                 {
-                    pc.printf("timetoseconds error: %i\r\n", status);
+                    ErrorHandler(__LINE__,"timetoseconds",status,__PRETTY_FUNCTION__);
                     return status;
                 }
             }
@@ -718,7 +726,7 @@ int NodeFlow::init_sched_config()
                 status=append_sched_config(scheduler[0],0);
                 if(status != NODEFLOW_OK)
                 {
-                    pc.printf("Error append_sched_config: %i\r\n", status);
+                    ErrorHandler(__LINE__,"append_sched_config",status,__PRETTY_FUNCTION__);
                     return status;
                 }
             #endif
@@ -729,13 +737,13 @@ int NodeFlow::init_sched_config()
             status=time_config_init();
             if(status != NODEFLOW_OK)
             {
-                pc.printf("Time Config failed: %i\r\n", status);  
+                ErrorHandler(__LINE__,"time_config_init",status,__PRETTY_FUNCTION__);  
                 return status;
             }
             status=add_sensing_groups();
             if(status != NODEFLOW_OK)
             {
-                pc.printf("Error add_sensing_groups failed: %i\r\n", status);  
+                ErrorHandler(__LINE__,"add_sensing_groups",status,__PRETTY_FUNCTION__);  
                 return status;
             }
 
@@ -745,7 +753,7 @@ int NodeFlow::init_sched_config()
                     status=append_sched_config(scheduler[i],0);
                     if(status != NODEFLOW_OK)
                     {
-                        pc.printf("Error append_sched_config: %i\r\n", status);
+                        ErrorHandler(__LINE__,"append_sched_config",status,__PRETTY_FUNCTION__);
                         return status;
                     }
                 #endif
@@ -761,7 +769,7 @@ int NodeFlow::timetoseconds(float scheduler_time, uint8_t group_id)
     status=append_sched_config(time_remainder,group_id); /**group_id dec for 0001,0010,0100,1000: 1,2,4,8*/
     if(status != NODEFLOW_OK)
     {
-        pc.printf("Error append_sched_config: %i\r\n", status);
+        ErrorHandler(__LINE__,"append_sched_config",status,__PRETTY_FUNCTION__);
         return status;
     }
     
@@ -779,7 +787,7 @@ int NodeFlow::overwrite_sched_config(uint16_t code,uint16_t length)
     status= DataManager::overwrite_file_entries(SchedulerConfig_n, s_conf.data, sizeof(s_conf.parameters));
     if(status != NODEFLOW_OK)
     {
-        pc.printf("Scheduler Config failed to overwrite: %i\r\n", status);
+        ErrorHandler(__LINE__,"SchedulerConfig",status,__PRETTY_FUNCTION__);
         return status;
     }
 
@@ -789,7 +797,7 @@ int NodeFlow::overwrite_sched_config(uint16_t code,uint16_t length)
     
     if(status != NODEFLOW_OK)
     {
-        pc.printf("Scheduler Config failed to append: %i\r\n", status);
+        ErrorHandler(__LINE__,"SchedulerConfig",status,__PRETTY_FUNCTION__);
         return status;
     }
 
@@ -805,7 +813,7 @@ int NodeFlow::append_sched_config(uint16_t time_comparator,uint8_t group_id)
     status= DataManager::append_file_entry(SchedulerConfig_n, t_conf.data, sizeof(t_conf.parameters));
     if(status != NODEFLOW_OK)
     {
-        pc.printf("Scheduler Config failed to append: %i\r\n", status);
+        ErrorHandler(__LINE__,"SchedulerConfig",status,__PRETTY_FUNCTION__);
     }
 
     return status;
@@ -826,14 +834,14 @@ int NodeFlow::init_send_sched_config()
     #endif
     if(status != NODEFLOW_OK)
     {
-        pc.printf("Error overwrite_send_sched_config: %i\r\n", status);
+        ErrorHandler(__LINE__,"overwrite_send_sched_config",status,__PRETTY_FUNCTION__);
         return status;
     }
     uint16_t sendschedulerOn;
     status=read_send_sched_config(0,&sendschedulerOn);
     if(status != NODEFLOW_OK)
     {
-        pc.printf("Error read_send_sched_config: %i\r\n", status);
+        ErrorHandler(__LINE__,"read_send_sched_config",status,__PRETTY_FUNCTION__);
         return status;
     }
     uint16_t send_sched_length;
@@ -849,7 +857,7 @@ int NodeFlow::init_send_sched_config()
             status=append_send_sched_config(time_remainder);
             if(status != NODEFLOW_OK)
             {
-                pc.printf("Error append_send_sched_config: %i\r\n", status);
+                ErrorHandler(__LINE__,"append_send_sched_config",status,__PRETTY_FUNCTION__);
                 return status;
             }
             pc.printf("%d. Sending ",i);
@@ -864,7 +872,7 @@ int NodeFlow::init_send_sched_config()
         status=read_sched_config(1,&sched_length);
         if(status != NODEFLOW_OK)
         {
-            pc.printf("Error read_sched_confi: %i\r\n", status);
+            ErrorHandler(__LINE__,"read_sched_config",status,__PRETTY_FUNCTION__);
             return status;
         }
         if(sched_length)
@@ -872,7 +880,7 @@ int NodeFlow::init_send_sched_config()
             status=append_send_sched_config(scheduler[0]);
             if(status != NODEFLOW_OK)
             {
-                pc.printf("Error append_send_sched_config: %i\r\n", status);
+                ErrorHandler(__LINE__,"append_send_sched_config",status,__PRETTY_FUNCTION__);
                 return status;
             }
         }
@@ -888,7 +896,7 @@ int NodeFlow::overwrite_send_sched_config(uint16_t code,uint16_t length)
     status= DataManager::overwrite_file_entries(SendSchedulerConfig_n, ss_conf.data, sizeof(ss_conf.parameters));
     if(status != NODEFLOW_OK)
     {
-        pc.printf("Send Scheduler Config failed to overwrite: %i\r\n", status);
+        ErrorHandler(__LINE__,"SendSchedulerConfig",status,__PRETTY_FUNCTION__);
         return status;
     }
 
@@ -897,7 +905,7 @@ int NodeFlow::overwrite_send_sched_config(uint16_t code,uint16_t length)
     status = DataManager::append_file_entry(SendSchedulerConfig_n, ss_conf.data, sizeof(ss_conf.parameters));
     if(status != NODEFLOW_OK)
     {
-        pc.printf("Send Scheduler Config failed to append: %i\r\n", status);
+        ErrorHandler(__LINE__,"SendSchedulerConfig",status,__PRETTY_FUNCTION__);
         return status;
     }
 
@@ -913,7 +921,7 @@ int NodeFlow::append_send_sched_config(uint16_t time_comparator)
     status= DataManager::append_file_entry(SendSchedulerConfig_n, ss_conf.data, sizeof(ss_conf.parameters));
     if(status != NODEFLOW_OK)
     {
-        pc.printf("Send Scheduler Config failed to append: %i\r\n", status);
+         ErrorHandler(__LINE__,"SendSchedulerConfig",status,__PRETTY_FUNCTION__);
     }
 
     return status;
@@ -925,7 +933,7 @@ int NodeFlow::read_send_sched_config(int i, uint16_t* time)
     status = DataManager::read_file_entry(SendSchedulerConfig_n, i, ss_conf.data, sizeof(ss_conf.parameters));
     if(status != NODEFLOW_OK)
     {
-        pc.printf("Send Scheduler Config failed to read: %i\r\n", status);
+         ErrorHandler(__LINE__,"SendSchedulerConfig",status,__PRETTY_FUNCTION__);
     }
 
     *time=ss_conf.parameters.time_comparator;
@@ -944,7 +952,7 @@ int NodeFlow::overwrite_clock_synch_config(int time_comparator, bool clockSynchO
     int count=0;
     while(status != NODEFLOW_OK && count<MAX_OVERWRITE_RETRIES) 
     {
-        pc.printf("Clock Config failed to overwrite: %i\r\n", status);
+        ErrorHandler(__LINE__,"ClockSynchConfig",status,__PRETTY_FUNCTION__);
         status = DataManager::overwrite_file_entries(ClockSynchConfig_n, c_conf.data, sizeof(c_conf.parameters));
         ++count;
     } 
@@ -958,7 +966,7 @@ int NodeFlow::read_clock_synch_config(uint16_t* time, bool &clockSynchOn)
     status = DataManager::read_file_entry(ClockSynchConfig_n, 0, c_conf.data, sizeof(c_conf.parameters));
     if (status != NODEFLOW_OK)
     {
-        pc.printf("\r\nError read_clock_synch_config %d",status);
+         ErrorHandler(__LINE__,"ClockSyncConfig",status,__PRETTY_FUNCTION__);
         return status;
     }
     
@@ -975,7 +983,7 @@ int NodeFlow::read_sched_config(int i, uint16_t* time_comparator)
     *time_comparator=r_conf.parameters.time_comparator;
     if (status!=NODEFLOW_OK)
     {
-        pc.printf("\nFailed to read scheduler %d",status);
+         ErrorHandler(__LINE__,"SchedulerConfig",status,__PRETTY_FUNCTION__);
     }
 
     return status;
@@ -988,7 +996,7 @@ int NodeFlow::read_sched_group_id(int i, uint8_t* group_id)
     *group_id=r_conf.parameters.group_id;
     if (status!=NODEFLOW_OK)
     {
-        pc.printf("\nFailed to read scheduler %d",status);
+        ErrorHandler(__LINE__,"SchedulerConfig",status,__PRETTY_FUNCTION__);
     }
 
     return status;
@@ -1004,7 +1012,7 @@ int NodeFlow:: set_flags_config(uint8_t ssck_flag)
     status= DataManager::overwrite_file_entries(FlagsConfig_n, f_conf.data, sizeof(f_conf.parameters));
     if(status != NODEFLOW_OK)
     {
-        pc.printf("Flags Config failed to overwrite: %i\r\n", status);  
+        ErrorHandler(__LINE__,"FlagsConfig",status,__PRETTY_FUNCTION__); 
     }
 
     return status;
@@ -1020,7 +1028,7 @@ int NodeFlow::set_wakeup_pin_flag(bool wakeup_pin)
 
     if(status != NODEFLOW_OK)
     {
-        pc.printf(" wakeup Flags Config failed to overwrite: %i\r\n", status); 
+        ErrorHandler(__LINE__,"FlagsConfig",status,__PRETTY_FUNCTION__);  
         status= DataManager::overwrite_file_entries(FlagsConfig_n, f_conf.data, sizeof(f_conf.parameters));
     }
     return status;
@@ -1040,7 +1048,7 @@ int NodeFlow::add_sensing_groups() {
         status=DataManager::append_file_entry(SensingGroupConfig_n, sg_conf.data, sizeof(sg_conf.parameters));
         if(status!=0)
         {
-            pc.printf("Add file failed: %i\r\n", status);
+            ErrorHandler(__LINE__,"SensingGroupConfig",status,__PRETTY_FUNCTION__); 
             return status;
         }
 
@@ -1051,14 +1059,14 @@ int NodeFlow::add_sensing_groups() {
         status = DataManager::append_file_entry(TempSensingGroupConfig_n, ts_conf.data, sizeof(ts_conf.parameters));
         if(status!=NODEFLOW_OK)
         {
-            pc.printf("Error append_file_entries No: %i status: %i\r\n", i, status);
+            ErrorHandler(__LINE__,"TempSensingGroupConfig",status,__PRETTY_FUNCTION__); 
             return status;
         }
             
         status = DataManager::read_file_entry(TempSensingGroupConfig_n, i, ts_conf.data, sizeof(ts_conf.parameters));
         if(status != NODEFLOW_OK)
         {
-            pc.printf("Read file failed: %i\r\n", status);
+            ErrorHandler(__LINE__,"TempSensingGroupConfig",status,__PRETTY_FUNCTION__); 
             return status;
         }
         pc.printf("%d. Sensing group id: %i, wake up every: %u Seconds\r\n",i, ts_conf.parameters.group_id,ts_conf.parameters.time_comparator);
@@ -1083,7 +1091,7 @@ int NodeFlow::set_scheduler(uint32_t* next_timediff)
     status=read_sched_config(0,&schedulerOn);
     if(status != NODEFLOW_OK)
     {
-        pc.printf("Failed to read_sched_config: %i\r\n", status);
+        ErrorHandler(__LINE__,"read_sched_config",status,__PRETTY_FUNCTION__); 
         return status;
     }
 
@@ -1091,14 +1099,14 @@ int NodeFlow::set_scheduler(uint32_t* next_timediff)
     status=read_send_sched_config(0,&sendschedulerOn);
     if(status != NODEFLOW_OK)
     {
-        pc.printf("Failed to read_send_sched_config: %i\r\n", status);
+        ErrorHandler(__LINE__,"read_send_sched_config",status,__PRETTY_FUNCTION__);
         return status;
     }
     uint16_t length;
     status=read_sched_config(1,&length);
     if(status != NODEFLOW_OK)
     {
-        pc.printf("Failed to read_sched_config: %i\r\n", status);
+        ErrorHandler(__LINE__,"read_sched_config",status,__PRETTY_FUNCTION__);
         return status;
     }
     uint32_t timediff_temp=DAYINSEC;
@@ -1125,7 +1133,7 @@ int NodeFlow::set_scheduler(uint32_t* next_timediff)
             status=read_sched_config(i+2,&times);
             if(status != NODEFLOW_OK)
             {
-                pc.printf("Failed to read_sched_config: %i\r\n", status);
+                ErrorHandler(__LINE__,"read_sched_config",status,__PRETTY_FUNCTION__);
                 return status;
             }
             scheduled_times=times*2;
@@ -1160,7 +1168,7 @@ int NodeFlow::set_scheduler(uint32_t* next_timediff)
                 status=overwrite_metric_flags(group_id);
                 if(status != NODEFLOW_OK)
                 {
-                    pc.printf("Failed to overwrite_metric_flags: %i\r\n", status);
+                    ErrorHandler(__LINE__,"overwrite_metric_flags",status,__PRETTY_FUNCTION__);
                     return status;
                 }
             }  
@@ -1176,7 +1184,7 @@ int NodeFlow::set_scheduler(uint32_t* next_timediff)
         status=read_sched_config(2,&times);
         if(status != NODEFLOW_OK)
         {
-            pc.printf("Failed to read_sched_config: %i\r\n", status);
+            ErrorHandler(__LINE__,"read_sched_config",status,__PRETTY_FUNCTION__);
             return status;
         }
         timediff_temp=times;
@@ -1240,7 +1248,7 @@ int NodeFlow::set_scheduler(uint32_t* next_timediff)
     status=read_clock_synch_config(&time,clockSynchOn);
     if (status != NODEFLOW_OK)
     {
-        pc.printf("\r\nError read_clock_synch_config %d",status);
+        ErrorHandler(__LINE__,"read_clock_synch_config",status,__PRETTY_FUNCTION__);
         return status;
     }
     uint32_t cs_time=(2*time)-time_remainder;
@@ -1250,7 +1258,7 @@ int NodeFlow::set_scheduler(uint32_t* next_timediff)
         status=read_clock_synch_config(&time,clockSynchOn);
         if (status != NODEFLOW_OK)
             {
-                pc.printf("\r\nError read_clock_synch_config %d",status);
+                ErrorHandler(__LINE__,"read_clock_synch_config",status,__PRETTY_FUNCTION__);
                 return status;
             }
         pc.printf("Next ClkSync ");
@@ -1293,7 +1301,7 @@ int NodeFlow::set_scheduler(uint32_t* next_timediff)
     } 
     mybit_int = int(ssck_flag.to_ulong());
 
-    pc.printf("\r\nSense flag: %d, Send flag: %d,Clock: %d, Kick flag: %d,\n", ssck_flag.test(0), ssck_flag.test(1), ssck_flag.test(2), ssck_flag.test(3));
+    pc.printf("\r\nSense flag: %d, Send flag: %d,Clock: %d, Kick flag: %d\n", ssck_flag.test(0), ssck_flag.test(1), ssck_flag.test(2), ssck_flag.test(3));
     ThisThread::sleep_for(100);
     set_flags_config(mybit_int);
     ovewrite_wakeup_timestamp(timediff_temp); 
@@ -1330,7 +1338,7 @@ int NodeFlow::fix_sensing_group_time(uint32_t time){
             if(status != NODEFLOW_OK)
             {
                 status=DataManager::append_file_entry(TempSensingGroupConfig_n, ts_conf.data, sizeof(ts_conf.parameters));
-                pc.printf("Error write temp sensor config. status: %i\r\n", status);
+                ErrorHandler(__LINE__,"TempSensingGroupConfig",status,__PRETTY_FUNCTION__);
                 return status;
             }
         }
@@ -1351,7 +1359,7 @@ int NodeFlow::set_reading_time(uint32_t* time)
     status = DataManager::read_file_entry(TimeConfig_n, 0, t_conf.data,sizeof(t_conf.parameters));
     if(status != NODEFLOW_OK)
     {
-        pc.printf("Error read_file_entry TimeConfig. status: %i\r\n", status);
+        ErrorHandler(__LINE__,"TimeConfig",status,__PRETTY_FUNCTION__);
         return status;
     }
 
@@ -1360,7 +1368,7 @@ int NodeFlow::set_reading_time(uint32_t* time)
     status = DataManager::read_file_entry(TempSensingGroupConfig_n, 0, ts_conf.data, sizeof(ts_conf.parameters));
     if(status != NODEFLOW_OK)
     {
-        pc.printf("Error read_file_entry Temporary Config. status: %i\r\n", status);
+        ErrorHandler(__LINE__,"TempSensingGroupConfig",status,__PRETTY_FUNCTION__);
         return status;
     }
 
@@ -1371,7 +1379,7 @@ int NodeFlow::set_reading_time(uint32_t* time)
         status=DataManager::read_file_entry(TempSensingGroupConfig_n, i, ts_conf.data, sizeof(ts_conf.parameters));
         if(status != NODEFLOW_OK)
         {
-            pc.printf("%i Error read_file_entry Temporary Config. status: %i\r\n",i, status);
+            ErrorHandler(__LINE__,"TempSensingGroupConfig",status,__PRETTY_FUNCTION__);
             return status;
         }
       
@@ -1402,7 +1410,7 @@ int NodeFlow::set_reading_time(uint32_t* time)
         status=DataManager::read_file_entry(TempSensingGroupConfig_n, i, ts_conf.data, sizeof(ts_conf.parameters));
         if(status != NODEFLOW_OK)
         {
-            pc.printf("Error read temporary time sensor config. status: %i\r\n", status);
+            ErrorHandler(__LINE__,"TempSensingGroupConfig",status,__PRETTY_FUNCTION__);
             return status;
         }
         int time_comp=ts_conf.parameters.time_comparator-time_comparator;
@@ -1413,7 +1421,7 @@ int NodeFlow::set_reading_time(uint32_t* time)
             status=DataManager::read_file_entry(SensingGroupConfig_n, i, sg_conf.data, sizeof(sg_conf.parameters));
             if(status != NODEFLOW_OK)
             {
-                pc.printf("Error read sensor config. status: %i\r\n", status);
+                ErrorHandler(__LINE__,"SensingGroupConfig",status,__PRETTY_FUNCTION__);
                 return status;
             }
            
@@ -1433,7 +1441,7 @@ int NodeFlow::set_reading_time(uint32_t* time)
             status=DataManager::overwrite_file_entries(TempSensingGroupConfig_n, ts_conf.data, sizeof(ts_conf.parameters)); 
             if(status != NODEFLOW_OK)
             {
-                pc.printf("Error overwrite_file_entries. status: %i\r\n", status);
+                ErrorHandler(__LINE__,"TempSensingGroupConfig",status,__PRETTY_FUNCTION__);
                 return status;
             }
         }
@@ -1443,7 +1451,7 @@ int NodeFlow::set_reading_time(uint32_t* time)
             if(status != NODEFLOW_OK)
             {
                 status=DataManager::append_file_entry(TempSensingGroupConfig_n, ts_conf.data, sizeof(ts_conf.parameters));
-                pc.printf("Error write temp sensor config. status: %i\r\n", status);
+                ErrorHandler(__LINE__,"TempSensingGroupConfig",status,__PRETTY_FUNCTION__);
                 return status;
             }
         }
@@ -1464,7 +1472,7 @@ int NodeFlow::overwrite_metric_flags(uint8_t mybit_int)
     if(status != NODEFLOW_OK)
     {   
         status=DataManager::overwrite_file_entries(MetricGroupConfig_n, mg_conf.data, sizeof(mg_conf.parameters));
-        pc.printf("Error metric flag config. status: %i\r\n", status);
+        ErrorHandler(__LINE__,"MetricGroupConfig",status,__PRETTY_FUNCTION__);
         return status;
     }
     return status;
@@ -1477,7 +1485,7 @@ int NodeFlow:: get_metric_flags(uint8_t *flag)
     status=DataManager::read_file_entry(MetricGroupConfig_n, 0, mg_conf.data, sizeof(mg_conf.parameters));
     if (status!=NODEFLOW_OK)
     {
-        pc.printf("\nFailed to read MetricGroupConfig %d\r\n",status);
+        ErrorHandler(__LINE__,"MetricGroupConfig",status,__PRETTY_FUNCTION__);
         return status;
     } 
     *flag=mg_conf.parameters.metric_group_id;
@@ -1489,7 +1497,7 @@ int NodeFlow::get_interrupt_latency(uint32_t *next_sch_time)
     status=DataManager::read_file_entry(NextTimeConfig_n, 0, t_conf.data,sizeof(t_conf.parameters));
     if (status != NODEFLOW_OK)
     {
-        pc.printf("Error read_file_entry NextTimeConfig. status: %i\r\n", status);
+        ErrorHandler(__LINE__,"NextTimeConfig",status,__PRETTY_FUNCTION__);
         return status;
     }
     
@@ -1505,7 +1513,7 @@ int NodeFlow::ovewrite_wakeup_timestamp(uint16_t time_remainder){
     t_conf.parameters.time_comparator=time_now()+time_remainder;
     status=DataManager::overwrite_file_entries( NextTimeConfig_n, t_conf.data, sizeof(t_conf.parameters));
     if (status != NODEFLOW_OK){
-        pc.printf(" NextTime Config failed to overwrite: %i\r\n", status);
+        ErrorHandler(__LINE__,"NextTimeConfig",status,__PRETTY_FUNCTION__);
     }
 
     return status;
@@ -1517,56 +1525,57 @@ int NodeFlow::ovewrite_wakeup_timestamp(uint16_t time_remainder){
  */
 int NodeFlow::get_timestamp()
 {
+
+   time_t unix_time=0;
+
    #if BOARD == EARHART_V1_0_0
-        int retcode=lpwan.join(CLASS_A);
+        int retcode=_radio.join(CLASS_A);
         if(retcode<0)
         {
-            pc.printf("Failed to join :%d\r\n",retcode);
+            ErrorHandler(__LINE__,"_radio.join",retcode,__PRETTY_FUNCTION__);
             return retcode;
         }
-        uint32_t rx_unix_timestamp=0;
-        int64_t timestamp=0;
         uint8_t dummy[1]={1};
         uint8_t port=0;
         uint32_t rx_dec_buffer[MAX_BUFFER_READING_TIMES];
         pc.printf("Horrayy,setting the time, bear with me\r\nRetries are set to %d\r\n",MAX_RETRY_CLOCK_SYNCH);
-        retcode=lpwan.send_message(223, dummy, sizeof(dummy));
-
+        retcode=_radio.send_message(223, dummy, sizeof(dummy));
         if(retcode<=0)
         {
-            pc.printf("Failed to send\r\n");
+            ErrorHandler(__LINE__,"FAILED TO SEND",retcode,__PRETTY_FUNCTION__);
             return retcode;
         }
-        
-        lpwan.receive_message(rx_dec_buffer,&port,&retcode);
+        _radio.receive_message(rx_dec_buffer,&port,&retcode);
         port=0;
         ThisThread::sleep_for(1000);
         for(int i=0; ((port!=CLOCK_SYNCH_PORT) && (i<MAX_RETRY_CLOCK_SYNCH));i++) 
         {
             pc.printf("%i. Waiting for a server message dude \r\n",i);
             ThisThread::sleep_for(5000);
-            retcode=lpwan.send_message(223, dummy, sizeof(dummy));
-            if(retcode<0)
+            retcode=_radio.send_message(223, dummy, sizeof(dummy));
+            if(status<0)
             {
-                pc.printf("Failed to send\r\n");
+                ErrorHandler(__LINE__,"FAILED TO SEND",retcode,__PRETTY_FUNCTION__);
             }
-            lpwan.receive_message(rx_dec_buffer,&port,&retcode);
-            if(port == CLOCK_SYNCH_PORT)
+            _radio.receive_message(rx_dec_buffer,&port,&retcode);
+            if(port == CLOCK_SYNCH_PORT && retcode>0)
             {
-                time_t time_now=time(NULL);
-                if (rx_dec_buffer[0]>time_now)
-                {
-                    pc.printf("Received value: %d\r\n",rx_dec_buffer[0]);
-                    set_time(rx_dec_buffer[0]);
-                }
+                unix_time=rx_dec_buffer[0];
             }
         }
     
     #endif /* BOARD == EARHART_V1_0_0 */
 
     #if BOARD == WRIGHT_V1_0_0
-
+        //_radio.get_unix_time(&unix_time);
     #endif
+
+    time_t time_now=time(NULL);
+    if (unix_time>time_now)
+    {
+        pc.printf("Received value: %d\r\n",unix_time);
+        set_time(unix_time);
+    }
 
     return NODEFLOW_OK;   
 }
@@ -1596,19 +1605,19 @@ int NodeFlow::timetodate(uint32_t remainder_time)
 
 int NodeFlow::sendTTN(uint8_t port, uint8_t payload[], uint16_t length)
 {
-    status=lpwan.join(CLASS_C);
+    status=_radio.join(CLASS_A);
     if(status < NODEFLOW_OK)
     {
-        pc.printf("Failed to join :%d\r\n",status);
+        ErrorHandler(__LINE__,"FAILED TO JOIN",status,__PRETTY_FUNCTION__);
         return status;
     }
     pc.printf("---------------------SENDING----------------------\r\n");
     timetodate(time_now());
     
-    status=lpwan.send_message(port, payload, length);
+    status=_radio.send_message(port, payload, length);
     if (status < NODEFLOW_OK)
     {
-        pc.printf("\r\nError Sending %d bytes",status);
+        ErrorHandler(__LINE__,"FAILED TO SEND",status,__PRETTY_FUNCTION__);
         return status;
     }
    
@@ -1621,14 +1630,14 @@ int NodeFlow::receiveTTN(uint32_t* rx_message, uint8_t* rx_port)
 {   uint8_t port=0;
     int retcode=0;
     uint32_t rx_dec_buffer[MAX_BUFFER_READING_TIMES];
-    lpwan.receive_message(rx_dec_buffer,&port,&retcode); 
+    _radio.receive_message(rx_dec_buffer,&port,&retcode); 
     
     if (port==SCHEDULER_PORT)
     {
         status=overwrite_sched_config(true, DIVIDE(retcode));
         if (status != NODEFLOW_OK)
         {
-            pc.printf("\r\nError overwrite_sched_config from server %d",status);
+            ErrorHandler(__LINE__,"overwrite_sched_config",status,__PRETTY_FUNCTION__);
             return status;
         }
 
@@ -1638,7 +1647,7 @@ int NodeFlow::receiveTTN(uint32_t* rx_message, uint8_t* rx_port)
             status=append_sched_config(rx_dec_buffer[i]/2,1); //TODO: CHANGE GROUP ID- depends on data
             if (status != NODEFLOW_OK)
             {
-                pc.printf("\r\nError append_sched_config from server %d",status);
+                ErrorHandler(__LINE__,"append_sched_config",status,__PRETTY_FUNCTION__);
                 return status;
             }
         }
@@ -1651,7 +1660,7 @@ int NodeFlow::receiveTTN(uint32_t* rx_message, uint8_t* rx_port)
         status=read_clock_synch_config(&time,clockSynchOn);
         if (status != NODEFLOW_OK)
             {
-                pc.printf("\r\nError read_clock_synch_config %d",status);
+                ErrorHandler(__LINE__,"read_clock_synch_config",status,__PRETTY_FUNCTION__);
                 return status;
             }
         if(retcode==1 && clockSynchOn)
@@ -1659,7 +1668,7 @@ int NodeFlow::receiveTTN(uint32_t* rx_message, uint8_t* rx_port)
             status=overwrite_clock_synch_config(rx_dec_buffer[0]/2,false);
             if (status != NODEFLOW_OK)
             {
-                pc.printf("Clock Config failed to overwrite: %i\r\n", status);
+                ErrorHandler(__LINE__,"overwrite_clock_synch_config",status,__PRETTY_FUNCTION__);
                 return status;
             }
 
@@ -1669,7 +1678,7 @@ int NodeFlow::receiveTTN(uint32_t* rx_message, uint8_t* rx_port)
             status=overwrite_clock_synch_config(rx_dec_buffer[0]/2,true);
             if (status != NODEFLOW_OK)
             {
-                pc.printf("Clock Config failed to overwrite: %i\r\n", status);
+                ErrorHandler(__LINE__,"overwrite_clock_synch_config",status,__PRETTY_FUNCTION__);
                 return status;
             }
         }
@@ -1683,7 +1692,7 @@ int NodeFlow::receiveTTN(uint32_t* rx_message, uint8_t* rx_port)
         pc.printf("Rx: %d(10)\r\n", rx_dec_buffer[0]);
         pc.printf("Port: %d\r\n", port);
     }
-    lpwan.sleep();
+    _radio.sleep();
     *rx_message=rx_dec_buffer[0];
     *rx_port=port;
     
@@ -1696,14 +1705,13 @@ int NodeFlow::get_flags()
 {    
     FlagsConfig f_conf;
     status=DataManager::read_file_entry(FlagsConfig_n, 0, f_conf.data,sizeof(f_conf.parameters));
-    bitset<8> ssck_flag(f_conf.parameters.ssck_flag);
-
     if(status != NODEFLOW_OK)
     {
-        pc.printf("FlagsConfig. status: %i\r\n", status);
+        ErrorHandler(__LINE__,"FlagsConfig",status,__PRETTY_FUNCTION__);
         return status;
     }
 
+    bitset<8> ssck_flag(f_conf.parameters.ssck_flag);
     if(ssck_flag.test(0) && ssck_flag.test(1) && ssck_flag.test(2))
     {
         return NodeFlow::FLAG_SENSE_SEND_SYNCH;
@@ -1748,7 +1756,7 @@ int NodeFlow::delay_pin_wakeup()
     status=DataManager::read_file_entry(FlagsConfig_n, 0, f_conf.data,sizeof(f_conf.parameters));
     if (status != NODEFLOW_OK)
     {
-        pc.printf("FlagsConfig. status: %i\r\n", status);
+        ErrorHandler(__LINE__,"FlagsConfig",status,__PRETTY_FUNCTION__);
         return status;
     }
      if (f_conf.parameters.pin_wakeup)
@@ -1767,7 +1775,7 @@ int NodeFlow::_clear_after_send()
     status= DataManager::delete_file_entries(SensorDataConfig_n);
     if (status!=NODEFLOW_OK)
     {
-        pc.printf("SensorDataConfig failed to overwrite: %i\r\n", status); 
+        ErrorHandler(__LINE__,"SensorDataConfig",status,__PRETTY_FUNCTION__); 
     }
     
    _clear_increment();
@@ -1792,13 +1800,43 @@ void NodeFlow::enter_standby(int seconds, bool wkup_one)
     } 
     
     #if BOARD == EARHART_V1_0_0
-        int retcode=lpwan.sleep();
+        int retcode=_radio.sleep();
     #endif /* BOARD == EARHART_V1_0_0 */
 
     //Without this delay it breaks..?!
     ThisThread::sleep_for(2);
 
     sleep_manager.standby(seconds, wkup_one);
+}
+
+void NodeFlow::ErrorHandler(int line, const char* str1, int status,const char* str2) 
+{
+   pc.printf("Error in line No = %d, %s,Status = %d,Function name = %s\r\n",line, str1, status, str2);
+   //check for concecutive line and status errors error reporting
+   int errCnt=0;
+   error_increment(&errCnt);
+   pc.printf("Errors %d",errCnt);
+   if(errCnt>=STATUS_ERROR_TOLERANCE+1)
+   {
+       NVIC_SystemReset();
+   }
+}
+
+void NodeFlow:: error_increment(int *errCnt)
+{
+    ErrorConfig e_conf;
+    status = DataManager::read_file_entry(ErrorConfig_n, 0, e_conf.data, sizeof(e_conf.parameters));
+    if (status == NODEFLOW_OK)
+    {
+        e_conf.parameters.errCnt=1+e_conf.parameters.errCnt;
+        status= DataManager::overwrite_file_entries(ErrorConfig_n, e_conf.data, sizeof(e_conf.parameters));
+        if (status!=NODEFLOW_OK)
+        {
+            ErrorHandler(__LINE__,"IncrementConfig",status,__PRETTY_FUNCTION__); 
+        }
+    }
+    *errCnt=e_conf.parameters.errCnt;
+
 }
 
 
