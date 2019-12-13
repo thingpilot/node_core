@@ -66,6 +66,10 @@ extern Serial pc;
 #endif
 
 #define MAX_BUFFER_SENDING_TIMES 10
+
+#if(!SCHEDULER)
+    #define SCHEDULER_SIZE METRIC_GROUPS_ON 
+#endif
 /** Eeprom configuration. 
  *
  * @param DeviceConfig. Device specifics- send with the message payload.
