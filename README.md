@@ -1,5 +1,8 @@
 ## Nodeflow Release Notes
 
+**v0.3.1** *13/12/2019*
+- Remove Git submodules folders for included libraries
+
 **v0.3.0** *13/12/2019*
 - NodeFlow handles most of the communication in the background without much effort needed from the embed programmer.
 - start() drives all the application. It handles the different modem and configuration.
