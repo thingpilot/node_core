@@ -9,3 +9,4 @@
         
 **v0.1.0-v0.2.0** *09/2019*
 - Empty NodeFlow class
+- Handles sleeping times/ eeprom driver/ lorawan/ nb-iot communication
