@@ -1,0 +1,2 @@
+[submodule "stm24256_eeprom_driver"]
+	url = https://github.com/thingpilot/stm24256_eeprom_driver

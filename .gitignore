@@ -1,12 +1,2 @@
-BUILD
-.mbed
-thingpilot_semtech_lora
-mbed-semtech-lora-rf-drivers
-stm24256_eeprom_driver
 
-tp_sleep_manager
-mbed-os
 tpl5010_watchdog_driver
-sara_n2_driver
-node_core_data_manager
-thingpilot_nbiot
