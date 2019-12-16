@@ -286,7 +286,7 @@ class NodeFlow: public DataManager
             FLAG_SENSE_SEND         = 6,     
             FLAG_SEND_SYNCH         = 7,
             FLAG_SENSE_SEND_SYNCH   = 8,
-            FLAG_UNKNOWN            = 9, /**This should not happen*/          
+            FLAG_UNKNOWN            = 9 /**This should not happen*/          
         };
 
         /** Enumerated list of possible comms radio stacks
@@ -463,8 +463,8 @@ class NodeFlow: public DataManager
          * @return          It could be one of these:
          *                  
          */
-        int fix_sensing_group_time(uint32_t time);
-
+         int set_temp_reading_times(uint16_t time);
+        
         /** Specific times for each sensing of metric groups *******************************************************
          */
 
@@ -482,13 +482,14 @@ class NodeFlow: public DataManager
          */     
         int set_scheduler(uint32_t* next_timediff);
 
-        /** Read theScheduler fholds the length and group id for each pecific times 
+        /** Scheduler holds the length and group id for each specific times 
          *                  
          * @param time      The sleeping time until next reading/sensing etc sensors measurement in seconds.
          * @return          It could be one of these:
          *                                       
          */ 
         int read_sched_config(int i,uint16_t* time_comparator);
+
         int read_sched_group_id(int i,uint8_t* time_comparator);
         /** Overwrite the Scheduler holds the length and group id for each specific time. 
          *                                      
@@ -538,26 +539,102 @@ class NodeFlow: public DataManager
          */
         int read_clock_synch_config(uint16_t* time,bool &clockSynchOn);
 
-        /** Set flags for the next wake up
+        /** Get wakeup flag.
+         *
+         *@return               It could be one of these:
+         *                      FLAG_WDG
+         *                      FLAG_SENSING
+         *                      FLAG_CLOCK_SYNCH
+         *                      FLAG_SENDING
+         *                      FLAG_WAKEUP_PIN
+         *                      FLAG_SENSE_SYNCH
+         *                      FLAG_SENSE_SEND   
+         *                      FLAG_SEND_SYNCH
+         *                      FLAG_SENSE_SEND_SYNCH
+         *                      FLAG_UNKNOWN
          */
         int get_flags();
 
+
+        /** Set flags. 4 flags for sensing, sending, clock synchronisation and kick the watchdog
+         *
+         *@return               It could be one of these:
+         *                      FLAG_SENSING = dec(1)
+         *                      FLAG_SENDING = dec(2) 
+         *                      FLAG_SENSE_SEND = dec(3)
+         *                      FLAG_CLOCK_SYNCH = dec(4)
+         *                      FLAG_SENSE_SYNCH = dec(5) 
+         *                      FLAG_SEND_SYNCH = dec(6)
+         *                      FLAG_SENSE_SEND_SYNCH = dec(7)
+         *                      FLAG_WDG = dec(8) 
+         */
         int set_flags_config(uint8_t ssck_flag);
+
+        /** Set wakeup pin flag to true or false.
+         *
+         */
         int set_wakeup_pin_flag(bool wakeup_pin);
+
+        /** Metric flags are used for each of the groups A to D. 
+         *
+         *@return               A decimal represantation of:
+         *                      MetricGroupA = dec(1)
+         *                      MetricGroupB = dec(2) 
+         *                      MetricGroupA&&B = dec(3)
+         *                      MetricGroupC = dec(4)
+         *                      MetricGroupA&&C = dec(5) 
+         *                      MetricGroupB&&C = dec(6)
+         *                      MetricGroupA&&B&&C  = dec(7)
+         *                      MetricGroupD = dec(8)
+         *                      ..
+         *                      MetricGroupA&&B&&C&&D = dec(15)
+         */
         int overwrite_metric_flags(uint8_t mybit_int);
+
+        /** Get metric flags are used for each of the groups A to D in order to handle each group after a wakeup timer. 
+         *
+         *@return               A decimal represantation of:
+         *                      MetricGroupA = dec(1)
+         *                      MetricGroupB = dec(2) 
+         *                      MetricGroupA&&B = dec(3)
+         *                      MetricGroupC = dec(4)
+         *                      MetricGroupA&&C = dec(5) 
+         *                      MetricGroupB&&C = dec(6)
+         *                      MetricGroupA&&B&&C  = dec(7)
+         *                      MetricGroupD = dec(8)
+         *                      ..
+         *                      MetricGroupA&&B&&C&&D = dec(15)
+         */
         int get_metric_flags(uint8_t *flag);
-        
-        //Sensing and Sending Handles
+
+        /** Handle Modem. Handles communication with the server in case of sense or send flag.
+         */
         int HandleModem();
+
         //TODO: MOVE THIS
+        /**Adds a bytes of sensing entries added as record by the user.
+         */
         int add_sensing_entry(uint8_t value);
+
+        /**Clears the increment/s.
+         */
         int _clear_increment();
+
+        /**Clears the increment/s && the eeprom after sending
+         */
         int _clear_after_send();
 
         /** Handle Interrupt 
          */
         int delay_pin_wakeup();
+
+        /** Re-measures the sleeping time after an interrupt 
+         */
         int get_interrupt_latency(uint32_t *next_sch_time);
+
+        /** Holds the wakeup (full timestamp). 
+            TODO: this will be used to check that we didn't missed a measurement while on program not implemented
+         */
         int ovewrite_wakeup_timestamp(uint16_t time_remainder);
 
         /** Manage device sleep times before calling sleep_manager.standby().

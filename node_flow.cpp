@@ -164,14 +164,13 @@ void NodeFlow::start()
             ErrorHandler(__LINE__,"init_sched_config", status,__PRETTY_FUNCTION__);
         }
 
-        #if(SEND_SCHEDULER)
-            status=init_send_sched_config();
-            
-            if (status!=NODEFLOW_OK)
-            {
-                ErrorHandler(__LINE__,"init_send_sched_config", status,__PRETTY_FUNCTION__);
-            }   
-        #endif
+        status=init_send_sched_config();
+        
+        if (status!=NODEFLOW_OK)
+        {
+            ErrorHandler(__LINE__,"init_send_sched_config", status,__PRETTY_FUNCTION__);
+        }   
+        
         flags=get_flags();
         status=set_scheduler(&next_time); 
         if (status!=NODEFLOW_OK)
@@ -455,7 +454,8 @@ int NodeFlow::HandleModem()
             status=_radio.coap_post((char*)nbiot_payload, recv_data, SaraN2::TEXT_PLAIN, response_code);
             if (response_code != 0 || response_code != 2 ) //TODO: Check
             {
-                 ErrorHandler(__LINE__,"Error Sending NBIOT",status,__PRETTY_FUNCTION__); //TODO: remove that as an error because it will restart
+                debug("Not sending. Response_code %d",response_code);
+                // ErrorHandler(__LINE__,"Error Sending NBIOT",status,__PRETTY_FUNCTION__); //TODO: remove that as an error because it will restart
             } 
             else
             {
@@ -656,9 +656,9 @@ int NodeFlow::init_sched_config()
             debug("\nWARNING!! Scheduler size too big,\nonly 1 interval time is associated with each metric group\n");
         }   
     #endif
-    debug("\nScheduler size %d",SCHEDULER_SIZE);
+   
     status=overwrite_sched_config(SCHEDULER,SCHEDULER_SIZE);
-    while (status != NODEFLOW_OK)
+    if (status != NODEFLOW_OK)
     {
         status=overwrite_sched_config(SCHEDULER,SCHEDULER_SIZE);
         if(status != NODEFLOW_OK)
@@ -669,6 +669,10 @@ int NodeFlow::init_sched_config()
     }
     uint16_t schedulerOn;
     status=read_sched_config(0,&schedulerOn);
+    if(status != NODEFLOW_OK)
+    {
+        ErrorHandler(__LINE__,"read_sched_config",status,__PRETTY_FUNCTION__);  
+    }
     if(schedulerOn)
     {   
         #if (SCHEDULER_A)
@@ -722,45 +726,35 @@ int NodeFlow::init_sched_config()
             }
         #endif
     }   
-    else
+    if(!schedulerOn)
     {
-        if(schedulerOn==1)
+        uint16_t sch_length;
+        status=read_sched_config(1,&sch_length);
+        if(status != NODEFLOW_OK)
         {
-            #if (!SCHEDULER)
-                status=append_sched_config(scheduler[0],0);
-                if(status != NODEFLOW_OK)
-                {
-                    ErrorHandler(__LINE__,"append_sched_config",status,__PRETTY_FUNCTION__);
-                    return status;
-                }
-            #endif
+            ErrorHandler(__LINE__,"read_sched_config",status,__PRETTY_FUNCTION__);  
         }
-        /**Each sensor has a different time*/
-        else
+        
+        status=time_config_init();
+        if(status != NODEFLOW_OK)
         {
-            status=time_config_init();
-            if(status != NODEFLOW_OK)
-            {
-                ErrorHandler(__LINE__,"time_config_init",status,__PRETTY_FUNCTION__);  
-                return status;
-            }
-            status=add_sensing_groups();
-            if(status != NODEFLOW_OK)
-            {
-                ErrorHandler(__LINE__,"add_sensing_groups",status,__PRETTY_FUNCTION__);  
-                return status;
-            }
+            ErrorHandler(__LINE__,"time_config_init",status,__PRETTY_FUNCTION__);  
+            return status;
+        }
+        status=add_sensing_groups();
+        if(status != NODEFLOW_OK)
+        {
+            ErrorHandler(__LINE__,"add_sensing_groups",status,__PRETTY_FUNCTION__);  
+            return status;
+        }
 
-            for(int i=0; i<SCHEDULER_SIZE; i++)
-            { 
-                #if (!SCHEDULER)
-                    status=append_sched_config(scheduler[i],0);
-                    if(status != NODEFLOW_OK)
-                    {
-                        ErrorHandler(__LINE__,"append_sched_config",status,__PRETTY_FUNCTION__);
-                        return status;
-                    }
-                #endif
+        for(int i=0; i<sch_length; i++)
+        { 
+            status=append_sched_config(scheduler[i],(i)); 
+            if(status != NODEFLOW_OK)
+            {
+                ErrorHandler(__LINE__,"append_sched_config",status,__PRETTY_FUNCTION__);
+                return status;
             }
         }
     }
@@ -785,7 +779,6 @@ int NodeFlow::timetoseconds(float scheduler_time, uint8_t group_id)
 
 int NodeFlow::overwrite_sched_config(uint16_t code,uint16_t length)
 {
-    debug("\r\nCode %d, length %d",code,length);
     SchedulerConfig s_conf;
     s_conf.parameters.time_comparator=code;
     status= DataManager::overwrite_file_entries(SchedulerConfig_n, s_conf.data, sizeof(s_conf.parameters));
@@ -796,7 +789,6 @@ int NodeFlow::overwrite_sched_config(uint16_t code,uint16_t length)
     }
 
     s_conf.parameters.time_comparator=length;
-
     status = DataManager::append_file_entry(SchedulerConfig_n, s_conf.data, sizeof(s_conf.parameters));
     
     if(status != NODEFLOW_OK)
@@ -826,69 +818,75 @@ int NodeFlow::append_sched_config(uint16_t time_comparator,uint8_t group_id)
 
 /** SendScheduler Config TODO:overwrite in case of an NBIOT received_message, should be less than the MAX_BUFFER_SENDING_TIMES
  */
-
 int NodeFlow::init_send_sched_config()
-{
-    debug("\r\n---------------ADD SENDING TIMES-----------------\r\n");
-    #if(SEND_SCHEDULER)
-        status=overwrite_send_sched_config(SEND_SCHEDULER,SEND_SCHEDULER_SIZE);
-    #endif
-    #if(!SEND_SCHEDULER)
-        status=overwrite_send_sched_config(SEND_SCHEDULER,0);
-    #endif
-    if(status != NODEFLOW_OK)
-    {
-        ErrorHandler(__LINE__,"overwrite_send_sched_config",status,__PRETTY_FUNCTION__);
-        return status;
-    }
-    uint16_t sendschedulerOn;
-    status=read_send_sched_config(0,&sendschedulerOn);
-    if(status != NODEFLOW_OK)
-    {
-        ErrorHandler(__LINE__,"read_send_sched_config",status,__PRETTY_FUNCTION__);
-        return status;
-    }
-    uint16_t send_sched_length;
-    uint16_t time_remainder=0;
-    if(sendschedulerOn)
-    {
-        read_send_sched_config(1,&send_sched_length);
-        for(int i=0; i<send_sched_length; i++)
-        {   
-            #if(SEND_SCHEDULER)
-                time_remainder=DIVIDE(((int(nbiot_send_scheduler[i]))*HOURINSEC)+((fmod(nbiot_send_scheduler[i],1))*6000));
+{       
+        #if(SEND_SCHEDULER)
+            #if BOARD == WRIGHT_V1_0_0
+                debug("WARNING!! SEND SCHEDULER IS ON FOR EARHART BOARD");
             #endif
-            status=append_send_sched_config(time_remainder);
-            if(status != NODEFLOW_OK)
-            {
-                ErrorHandler(__LINE__,"append_send_sched_config",status,__PRETTY_FUNCTION__);
-                return status;
-            }
-            debug("%d. Sending ",i);
-            timetodate(time_remainder*2);
-        }
-       
-    }
-
-    else
-    {  
-        uint16_t sched_length;
-        status=read_sched_config(1,&sched_length);
+            status=overwrite_send_sched_config(SEND_SCHEDULER,SEND_SCHEDULER_SIZE);
+        #endif
+        #if(!SEND_SCHEDULER)
+            status=overwrite_send_sched_config(SEND_SCHEDULER,0);
+        #endif
+    #if BOARD == WRIGHT_V1_0_0
+        debug("\r\n---------------ADD SENDING TIMES-----------------\r\n");
+        
         if(status != NODEFLOW_OK)
         {
-            ErrorHandler(__LINE__,"read_sched_config",status,__PRETTY_FUNCTION__);
+            ErrorHandler(__LINE__,"overwrite_send_sched_config",status,__PRETTY_FUNCTION__);
             return status;
         }
-        if(sched_length)
+        uint16_t sendschedulerOn;
+        status=read_send_sched_config(0,&sendschedulerOn);
+        if(status != NODEFLOW_OK)
         {
-            status=append_send_sched_config(scheduler[0]);
+            ErrorHandler(__LINE__,"read_send_sched_config",status,__PRETTY_FUNCTION__);
+            return status;
+        }
+        uint16_t send_sched_length;
+        uint16_t time_remainder=0;
+        if(sendschedulerOn)
+        {
+                read_send_sched_config(1,&send_sched_length);
+                for(int i=0; i<send_sched_length; i++)
+                {   
+                    #if(SEND_SCHEDULER)
+                        time_remainder=DIVIDE(((int(nbiot_send_scheduler[i]))*HOURINSEC)+((fmod(nbiot_send_scheduler[i],1))*6000));
+                    #endif
+                    status=append_send_sched_config(time_remainder);
+                    if(status != NODEFLOW_OK)
+                    {
+                        ErrorHandler(__LINE__,"append_send_sched_config",status,__PRETTY_FUNCTION__);
+                        return status;
+                    }
+                    debug("%d. Sending ",i);
+                    timetodate(time_remainder*2);
+                }
+        
+        
+        }
+
+        else
+        {  
+            uint16_t sched_length;
+            status=read_sched_config(1,&sched_length);
             if(status != NODEFLOW_OK)
             {
-                ErrorHandler(__LINE__,"append_send_sched_config",status,__PRETTY_FUNCTION__);
+                ErrorHandler(__LINE__,"read_sched_config",status,__PRETTY_FUNCTION__);
                 return status;
             }
+            if(sched_length)
+            {
+                status=append_send_sched_config(scheduler[0]);
+                if(status != NODEFLOW_OK)
+                {
+                    ErrorHandler(__LINE__,"append_send_sched_config",status,__PRETTY_FUNCTION__);
+                    return status;
+                }
+            }
         }
-    }
+    #endif
 return status;
 }
 
@@ -1042,31 +1040,55 @@ int NodeFlow::set_wakeup_pin_flag(bool wakeup_pin)
  */
 int NodeFlow::add_sensing_groups() {
     debug("\r\n---------------ADD METRIC GROUPS-----------------\r\n");
-    sensor_config_init(SCHEDULER_SIZE);
-    for (int i=0; i<SCHEDULER_SIZE; i++)
+    uint16_t sch_length;
+    status=read_sched_config(1,&sch_length);
+    if(status != NODEFLOW_OK)
+    {
+        ErrorHandler(__LINE__,"ead_sched_config",status,__PRETTY_FUNCTION__);  
+    }
+    sensor_config_init(sch_length);
+    for (int i=0; i<sch_length; i++)
     {
         SensingGroupConfig sg_conf;
-        sg_conf.parameters.group_id = false;
-        sg_conf.parameters.time_comparator=scheduler[i];
-        
-        status=DataManager::append_file_entry(SensingGroupConfig_n, sg_conf.data, sizeof(sg_conf.parameters));
-        if(status!=0)
-        {
-            ErrorHandler(__LINE__,"SensingGroupConfig",status,__PRETTY_FUNCTION__); 
-            return status;
-        }
-
         TempSensingGroupConfig ts_conf;
-        ts_conf.parameters.group_id = false;
+        sg_conf.parameters.group_id = (i);
+        sg_conf.parameters.time_comparator=scheduler[i];
+        ts_conf.parameters.group_id = (i);
         ts_conf.parameters.time_comparator=scheduler[i];
-    
-        status = DataManager::append_file_entry(TempSensingGroupConfig_n, ts_conf.data, sizeof(ts_conf.parameters));
-        if(status!=NODEFLOW_OK)
+
+        if(i == 0)
         {
-            ErrorHandler(__LINE__,"TempSensingGroupConfig",status,__PRETTY_FUNCTION__); 
-            return status;
+            status= DataManager::overwrite_file_entries(SensingGroupConfig_n, sg_conf.data, sizeof(sg_conf.parameters));
+            if(status!=0)
+            {
+                ErrorHandler(__LINE__,"SensingGroupConfig",status,__PRETTY_FUNCTION__); 
+                return status;
+            }
+            status= DataManager::overwrite_file_entries(TempSensingGroupConfig_n, ts_conf.data, sizeof(ts_conf.parameters));
+            if(status!=0)
+            {
+                ErrorHandler(__LINE__,"SensingGroupConfig",status,__PRETTY_FUNCTION__); 
+                return status;
+            }
         }
-            
+        else
+        {
+            status=DataManager::append_file_entry(SensingGroupConfig_n, sg_conf.data, sizeof(sg_conf.parameters));
+            if(status!=0)
+            {
+                ErrorHandler(__LINE__,"SensingGroupConfig",status,__PRETTY_FUNCTION__); 
+                return status;
+            }
+
+        
+            status = DataManager::append_file_entry(TempSensingGroupConfig_n, ts_conf.data, sizeof(ts_conf.parameters));
+            if(status!=NODEFLOW_OK)
+            {
+                ErrorHandler(__LINE__,"TempSensingGroupConfig",status,__PRETTY_FUNCTION__); 
+                return status;
+            }
+        }
+        
         status = DataManager::read_file_entry(TempSensingGroupConfig_n, i, ts_conf.data, sizeof(ts_conf.parameters));
         if(status != NODEFLOW_OK)
         {
@@ -1087,7 +1109,6 @@ int NodeFlow::add_sensing_groups() {
  */
 int NodeFlow::set_scheduler(uint32_t* next_timediff)
 {
-    
     uint8_t mybit_int;
     bitset<8> ssck_flag(0b0000'0000);
 
@@ -1133,7 +1154,6 @@ int NodeFlow::set_scheduler(uint32_t* next_timediff)
     {
         for (int i=0; i<length; i++)
         {
-            
             status=read_sched_config(i+2,&times);
             if(status != NODEFLOW_OK)
             {
@@ -1154,8 +1174,6 @@ int NodeFlow::set_scheduler(uint32_t* next_timediff)
                 if (timediff < timediff_temp)
                 {
                     read_sched_group_id(i+2,&group_id);
-                    
-
                 }
                 if (timediff == timediff_temp)
                 {
@@ -1182,24 +1200,8 @@ int NodeFlow::set_scheduler(uint32_t* next_timediff)
         timetodate(next_sch_time);
        
     }
-    else if(schedulerOn == false && length==1)
-    {
-        
-        status=read_sched_config(2,&times);
-        if(status != NODEFLOW_OK)
-        {
-            ErrorHandler(__LINE__,"read_sched_config",status,__PRETTY_FUNCTION__);
-            return status;
-        }
-        status=overwrite_metric_flags(1);
-        if(status != NODEFLOW_OK)
-        {
-            ErrorHandler(__LINE__,"overwrite_metric_flags",status,__PRETTY_FUNCTION__);
-            return status;
-        }
-        timediff_temp=times;
-    }
-    else if(schedulerOn == false && length>1)
+   
+    else if(!schedulerOn)
     {
        set_reading_time(&timediff_temp);  
     } 
@@ -1211,45 +1213,43 @@ int NodeFlow::set_scheduler(uint32_t* next_timediff)
 
     if(sendschedulerOn)
     {
-        uint16_t send_length;
-        uint16_t sched_time_temp;
-        read_send_sched_config(1,&send_length);
-        for (int i=0; i<send_length; i++)
-        {   
-            read_send_sched_config(i+2,&sched_time_temp);
-            scheduled_times=sched_time_temp*2;
-            //Make sure that the time does not exceeds 24 hours(user mistake)
-            scheduled_times=scheduled_times%DAYINSEC;
-            timediff=scheduled_times-time_remainder;
+        
+        #if BOARD == WRIGHT_V1_0_0
+            uint16_t send_length;
+            uint16_t sched_time_temp;
+            read_send_sched_config(1,&send_length);
+            for (int i=0; i<send_length; i++)
+            {   
+                read_send_sched_config(i+2,&sched_time_temp);
+                scheduled_times=sched_time_temp*2;
+                //Make sure that the time does not exceeds 24 hours(user mistake)
+                scheduled_times=scheduled_times%DAYINSEC;
+                timediff=scheduled_times-time_remainder;
 
-            if(timediff<0)
-            {
-                timediff=timediff+DAYINSEC;
+                if(timediff<0)
+                {
+                    timediff=timediff+DAYINSEC;
+                }
+                if (timediff<timediff_temp_send)
+                {
+                    timediff_temp_send=timediff; //holds the smallest different form time_now
+                    next_sch_time=scheduled_times;
+                }  
             }
-            if (timediff<timediff_temp_send)
+            debug("Next Sending ");
+            timetodate(next_sch_time);
+            
+            if(timediff_temp_send<=timediff_temp)
             {
-                timediff_temp_send=timediff; //holds the smallest different form time_now
-                next_sch_time=scheduled_times;
-            }  
-        }
-        debug("Next Sending ");
-        timetodate(next_sch_time);
-
-         if(timediff_temp_send<=timediff_temp)
-        {
-           
-            ssck_flag.set(1);
-            if(schedulerOn == false && length>1)
-            {
-                fix_sensing_group_time(timediff_temp_send);
+            
+                ssck_flag.set(1);
+                if(timediff_temp_send<timediff_temp)
+                {
+                    timediff_temp=timediff_temp_send;
+                    ssck_flag.reset(0);
+                } 
             }
-               
-            if(timediff_temp_send<timediff_temp)
-            {
-                timediff_temp=timediff_temp_send;
-                ssck_flag.reset(0);
-            } 
-        }
+        #endif
     }
    
     //the clock synch should be send in 2 bytes, so half the value)
@@ -1281,10 +1281,6 @@ int NodeFlow::set_scheduler(uint32_t* next_timediff)
         {   
             
             ssck_flag.set(2);
-            if(schedulerOn == false && length>1)
-            {
-                fix_sensing_group_time(cs_time);
-            }
             if(cs_time<timediff_temp)
             {
                 timediff_temp=cs_time;
@@ -1295,19 +1291,14 @@ int NodeFlow::set_scheduler(uint32_t* next_timediff)
         }
     }
     
-    /**Check that its not more than 2 hours*/
+    /**Check that its not more than 2 hours, 6600*/
     if (timediff_temp>6600)  
     {
-        if(schedulerOn == false && length>1)
-        {
-            fix_sensing_group_time(timediff_temp);
-        }
         timediff_temp=6600;
         ssck_flag.reset(0);
         ssck_flag.reset(1);
         ssck_flag.reset(2);
-        ssck_flag.set(3);
-       
+        ssck_flag.set(3);  
     } 
     mybit_int = int(ssck_flag.to_ulong());
 
@@ -1315,56 +1306,30 @@ int NodeFlow::set_scheduler(uint32_t* next_timediff)
     ThisThread::sleep_for(100);
     set_flags_config(mybit_int);
     ovewrite_wakeup_timestamp(timediff_temp); 
-
+    if(!schedulerOn)
+    {
+        set_temp_reading_times(timediff_temp);
+    }
     *next_timediff=timediff_temp;
     return NODEFLOW_OK;   
 }
 
 
-
-int NodeFlow::fix_sensing_group_time(uint32_t time){
-    uint16_t sched_length;
-    read_sched_config(1,&sched_length);
-    uint8_t temp[sched_length];
-    TempSensingGroupConfig ts_conf;
-    SensingGroupConfig sg_conf;
-
-    for(int i=0; i<sched_length; i++)
-    {
-        status = DataManager::read_file_entry(TempSensingGroupConfig_n, i, ts_conf.data, sizeof(ts_conf.parameters));
-        ts_conf.parameters.time_comparator= ts_conf.parameters.time_comparator-time;
-        temp[i]=ts_conf.parameters.time_comparator;
-    }
-    for(int i=0; i<sched_length; i++)
-    {   
-        ts_conf.parameters.time_comparator=temp[i];
-        if(i == 0)
-        {
-            status=DataManager::overwrite_file_entries(TempSensingGroupConfig_n, ts_conf.data, sizeof(ts_conf.parameters));  
-        }
-        else
-        {
-            status=DataManager::append_file_entry(TempSensingGroupConfig_n, ts_conf.data, sizeof(ts_conf.parameters));
-            if(status != NODEFLOW_OK)
-            {
-                status=DataManager::append_file_entry(TempSensingGroupConfig_n, ts_conf.data, sizeof(ts_conf.parameters));
-                ErrorHandler(__LINE__,"TempSensingGroupConfig",status,__PRETTY_FUNCTION__);
-                return status;
-            }
-        }
-
-    }
-return NODEFLOW_OK;
-}
 int NodeFlow::set_reading_time(uint32_t* time)
 { 
     TempSensingGroupConfig ts_conf;
     TimeConfig t_conf;
     SensingGroupConfig sg_conf;
-    
-    uint16_t temp_time[SCHEDULER_SIZE];
+    uint16_t sch_length;
+    status=read_sched_config(1,&sch_length);
+    if(status != NODEFLOW_OK)
+    {
+        ErrorHandler(__LINE__,"read_sched_config",status,__PRETTY_FUNCTION__);  
+    }
+    uint16_t temp_time[sch_length];
     uint8_t mybit_int;
     bitset<8> flags(0b0000'0000);
+    int time_comparator;
 
     status = DataManager::read_file_entry(TimeConfig_n, 0, t_conf.data,sizeof(t_conf.parameters));
     if(status != NODEFLOW_OK)
@@ -1373,7 +1338,7 @@ int NodeFlow::set_reading_time(uint32_t* time)
         return status;
     }
 
-    int time_comparator=t_conf.parameters.time_comparator; 
+    time_comparator=t_conf.parameters.time_comparator; 
     
     status = DataManager::read_file_entry(TempSensingGroupConfig_n, 0, ts_conf.data, sizeof(ts_conf.parameters));
     if(status != NODEFLOW_OK)
@@ -1382,9 +1347,10 @@ int NodeFlow::set_reading_time(uint32_t* time)
         return status;
     }
 
-    int temp=ts_conf.parameters.time_comparator; //time_left for first sensor
-    
-    for (int i=0; i<SCHEDULER_SIZE; i++)
+    int temp=ts_conf.parameters.time_comparator; 
+
+    //todo: change scheduler size 
+    for (int i=0; i<sch_length; i++)
     {
         status=DataManager::read_file_entry(TempSensingGroupConfig_n, i, ts_conf.data, sizeof(ts_conf.parameters));
         if(status != NODEFLOW_OK)
@@ -1392,7 +1358,6 @@ int NodeFlow::set_reading_time(uint32_t* time)
             ErrorHandler(__LINE__,"TempSensingGroupConfig",status,__PRETTY_FUNCTION__);
             return status;
         }
-      
         int time_comparator_now= ts_conf.parameters.time_comparator;
 
         if (temp >= time_comparator_now && time_comparator_now != 0)
@@ -1405,7 +1370,6 @@ int NodeFlow::set_reading_time(uint32_t* time)
                     flags.reset(y);
                 }
             }
-
             temp=time_comparator_now; 
         }
     }
@@ -1413,9 +1377,28 @@ int NodeFlow::set_reading_time(uint32_t* time)
     time_comparator=temp;
     mybit_int = int(flags.to_ulong());
     overwrite_metric_flags(mybit_int);
-    status=set_time_config(time_comparator);
     
-    for(int i=0; i<SCHEDULER_SIZE; i++)
+    debug("\r\nNext Reading ");
+    timetodate(time_comparator+time_now());
+    debug("GroupA: %d, GroupB: %d, GroupC: %d, GroupD: %d\n", flags.test(0), flags.test(1), flags.test(2), flags.test(3));
+    *time=time_comparator;
+
+    return status;
+}
+int NodeFlow::set_temp_reading_times(uint16_t time)
+{
+    TempSensingGroupConfig ts_conf;
+    SensingGroupConfig sg_conf;
+    uint16_t sch_length;
+    status=read_sched_config(1,&sch_length);
+    if(status != NODEFLOW_OK)
+    {
+        ErrorHandler(__LINE__,"read_sched_config",status,__PRETTY_FUNCTION__);  
+    }
+    uint16_t temp_time[sch_length];
+
+    status=set_time_config(time);
+    for(int i=0; i<sch_length; i++)
     {
         status=DataManager::read_file_entry(TempSensingGroupConfig_n, i, ts_conf.data, sizeof(ts_conf.parameters));
         if(status != NODEFLOW_OK)
@@ -1423,10 +1406,11 @@ int NodeFlow::set_reading_time(uint32_t* time)
             ErrorHandler(__LINE__,"TempSensingGroupConfig",status,__PRETTY_FUNCTION__);
             return status;
         }
-        int time_comp=ts_conf.parameters.time_comparator-time_comparator;
+        int time_comp=ts_conf.parameters.time_comparator-time;
         temp_time[i]=time_comp;
        
-        if(time_comp == 0)
+       
+        if(temp_time[i] == 0)
         {
             status=DataManager::read_file_entry(SensingGroupConfig_n, i, sg_conf.data, sizeof(sg_conf.parameters));
             if(status != NODEFLOW_OK)
@@ -1434,16 +1418,15 @@ int NodeFlow::set_reading_time(uint32_t* time)
                 ErrorHandler(__LINE__,"SensingGroupConfig",status,__PRETTY_FUNCTION__);
                 return status;
             }
-           
-            temp_time[i]=sg_conf.parameters.time_comparator;
-        }
 
+            temp_time[i]=sg_conf.parameters.time_comparator;
+            
+        }   
     }
 
-    for(int i=0; i<SCHEDULER_SIZE; i++)
+    for(int i=0; i<sch_length; i++)
     {
         debug("%d. Sensing group id: %i, next reading: %u seconds\r\n",i,i,temp_time[i]);
-        ts_conf.parameters.group_id=i;
         ts_conf.parameters.time_comparator=temp_time[i];
 
         if(i == 0)
@@ -1465,14 +1448,10 @@ int NodeFlow::set_reading_time(uint32_t* time)
                 return status;
             }
         }
+
     }
     
-    debug("\r\nNext Reading ");
-    timetodate(time_comparator+time_now());
-    debug("GroupA: %d, GroupB: %d, GroupC: %d, GroupD: %d\n", flags.test(0), flags.test(1), flags.test(2), flags.test(3));
-    *time=time_comparator;
-
-    return status;
+   return status;
 }
 int NodeFlow::overwrite_metric_flags(uint8_t mybit_int)
 {
@@ -1621,7 +1600,7 @@ int NodeFlow::sendTTN(uint8_t port, uint8_t payload[], uint16_t length)
         ErrorHandler(__LINE__,"FAILED TO JOIN",status,__PRETTY_FUNCTION__);
         return status;
     }
-    debug("---------------------SENDING----------------------\r\n");
+    debug("\n---------------------SENDING----------------------\r\n");
     timetodate(time_now());
     
     status=_radio.send_message(port, payload, length);
