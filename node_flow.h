@@ -23,7 +23,6 @@
 #include "platform/mbed_error.h"
 #include "platform/mbed_stats.h"
 
-extern Serial pc;
 
 #if BOARD == EARHART_V1_0_0
     #include "LorawanTP.h"
