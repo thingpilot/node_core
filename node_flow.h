@@ -93,7 +93,7 @@ union SensorDataConfig
 {
     struct 
     {
-        uint16_t byte;//[1]; //store a byte array // group_id flag
+        uint16_t byte;
 
     } parameters;
 
@@ -194,7 +194,6 @@ union SensingGroupConfig
 {
     struct 
     {   
-        uint8_t group_id;
         uint16_t time_comparator; 
     } parameters;
 
@@ -204,8 +203,7 @@ union SensingGroupConfig
 union TempSensingGroupConfig
 {
     struct 
-    {   
-        uint8_t group_id;
+    {  
         uint16_t time_comparator; 
     } parameters;
 
@@ -243,6 +241,7 @@ union ErrorConfig
     struct 
     {
         uint16_t errCnt;
+        uint16_t line_arr[20];
     } parameters;
 
     char data[sizeof(ErrorConfig::parameters)];
@@ -252,7 +251,7 @@ union ErrorConfig
  */
 enum Filenames
 {
-    DeviceConfig_n              = 0,
+    ErrorConfig_n               = 0, /**Holds an increment of concecutives errors */
     SensorDataConfig_n          = 1, 
     SchedulerConfig_n           = 2,
     ClockSynchConfig_n          = 3,
@@ -263,8 +262,8 @@ enum Filenames
     TempSensingGroupConfig_n    = 8,
     NextTimeConfig_n            = 9,
     SendSchedulerConfig_n       = 10,
-    MetricGroupConfig_n         = 11,
-    ErrorConfig_n               = 12
+    MetricGroupConfig_n         = 11
+    
  };
 
 /** Nodeflow Class
@@ -729,10 +728,9 @@ class NodeFlow: public DataManager
         /**Read current error increment value.
          * 
          *@param increment_value increment_value
+         *@param increment_value increment_value
          */
-        void error_increment(int *errCnt);
-
-/**Critical errors that the device will need to reset if happens */
+        void error_increment(int &errCnt, uint16_t line, bool &error); //, uint16_t line, bool error, uint16_t line, bool error// /**Critical errors that the device will need to reset if happens */
     enum
     {   
         NODEFLOW_OK                 =  0,

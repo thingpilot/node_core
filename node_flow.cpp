@@ -142,7 +142,7 @@ void NodeFlow::start()
         debug("\r\n                      __|__       \n               --@--@--(_)--@--@--\n-------------------THING PILOT--------------------\r\n");
         debug("\nDevice Unique ID: %08X %08X %08X \r", STM32_UID[0], STM32_UID[1], STM32_UID[2]);
         status=initialise();
-        if (initialise() != NODEFLOW_OK)
+        if (status != NODEFLOW_OK)
         { 
             NVIC_SystemReset(); 
         }
@@ -249,6 +249,10 @@ int NodeFlow::initialise()
     SendSchedulerConfig_File_t.parameters.filename = SendSchedulerConfig_n;  
     SendSchedulerConfig_File_t.parameters.length_bytes = sizeof( SendSchedulerConfig::parameters);
     #if(SEND_SCHEDULER)
+        #if BOARD == EARHART_V1_0_0
+            debug("\r\nWARNING!! SEND SCHEDULER IS ON FOR EARHART BOARD\r\n");
+            debug("\r\nVisit \r\n");
+        #endif
         status=DataManager::add_file(SendSchedulerConfig_File_t, MAX_BUFFER_SENDING_TIMES+2); 
     #endif
     #if(!SEND_SCHEDULER)
@@ -426,6 +430,7 @@ int NodeFlow::HandleModem()
         int response_code=-1;
         uint8_t payload[written_entries];
         uint8_t nbiot_payload[written_entries+4];
+        char nbiot[written_entries+4];
         uint32_t sn=STM32_UID[0];
         *(time_t *)(nbiot_payload)=sn;
       
@@ -442,6 +447,7 @@ int NodeFlow::HandleModem()
         /**TODO: NBIOT send */
         #if BOARD == WRIGHT_V1_0_0
             memcpy(nbiot_payload+4,payload,written_entries); /*Adds a part of the serial number 4 bytes*/
+            memcpy(nbiot+4,payload,written_entries);
             debug("\r\nNBIOT Buffer(LSB)  = 0x");
             for (int i=0; i<written_entries+4; i++) 
             {
@@ -451,10 +457,10 @@ int NodeFlow::HandleModem()
             //TODO: CHECK WITH NBIOT
             char recv_data[512];
             
-            status=_radio.coap_post((char*)nbiot_payload, recv_data, SaraN2::TEXT_PLAIN, response_code);
+            status=_radio.coap_post(nbiot, recv_data, SaraN2::TEXT_PLAIN, response_code); //APPLICATION_OCTET
             if (response_code != 0 || response_code != 2 ) //TODO: Check
             {
-                debug("Not sending. Response_code %d",response_code);
+                debug("Error sending. Response_code %d",response_code);
                 // ErrorHandler(__LINE__,"Error Sending NBIOT",status,__PRETTY_FUNCTION__); //TODO: remove that as an error because it will restart
             } 
             else
@@ -496,17 +502,18 @@ void NodeFlow::add_record(DataType data)
             for (int i=0; i<4; i++)
             {
                 debug("[ 0x%.2x]", time_bytes[i]);
-                add_sensing_entry(time_bytes[i]);
+                add_sensing_entry(time_bytes[4-i]);
             }
         debug("\r\n");
         #endif
         written_entries=5;
     }
     debug("Bytes = ");
-    for (int i=0; i<sizeof(DataType); i++)
+   
+    for (int i=sizeof(DataType); i>0; i--)
     {
-        debug("[ 0x%.2x]", bytes[i]);
-        add_sensing_entry(bytes[i]);
+        debug("[ 0x%.2x]", bytes[i-1]);
+        add_sensing_entry(bytes[i-1]);
     }
     debug("\r\n");
 }
@@ -821,9 +828,6 @@ int NodeFlow::append_sched_config(uint16_t time_comparator,uint8_t group_id)
 int NodeFlow::init_send_sched_config()
 {       
         #if(SEND_SCHEDULER)
-            #if BOARD == WRIGHT_V1_0_0
-                debug("WARNING!! SEND SCHEDULER IS ON FOR EARHART BOARD");
-            #endif
             status=overwrite_send_sched_config(SEND_SCHEDULER,SEND_SCHEDULER_SIZE);
         #endif
         #if(!SEND_SCHEDULER)
@@ -1051,9 +1055,7 @@ int NodeFlow::add_sensing_groups() {
     {
         SensingGroupConfig sg_conf;
         TempSensingGroupConfig ts_conf;
-        sg_conf.parameters.group_id = (i);
         sg_conf.parameters.time_comparator=scheduler[i];
-        ts_conf.parameters.group_id = (i);
         ts_conf.parameters.time_comparator=scheduler[i];
 
         if(i == 0)
@@ -1095,7 +1097,7 @@ int NodeFlow::add_sensing_groups() {
             ErrorHandler(__LINE__,"TempSensingGroupConfig",status,__PRETTY_FUNCTION__); 
             return status;
         }
-        debug("%d. Sensing group id: %i, wake up every: %u Seconds\r\n",i, ts_conf.parameters.group_id,ts_conf.parameters.time_comparator);
+        debug("%d. Sensing group id: %i, wake up every: %u Seconds\r\n",i,i,ts_conf.parameters.time_comparator);
                 
         }
      
@@ -1803,31 +1805,57 @@ void NodeFlow::ErrorHandler(int line, const char* str1, int status,const char* s
    debug("Error in line No = %d, %s,Status = %d,Function name = %s\r\n",line, str1, status, str2);
    //check for concecutive line and status errors error reporting
    int errCnt=0;
-   error_increment(&errCnt);
-   debug("Errors %d",errCnt);
-   if(errCnt>=STATUS_ERROR_TOLERANCE+1)
+   bool error=false;
+   error_increment(errCnt, line, error); 
+   debug("Errors %d\r\n",errCnt);
+   if(error)
    {
-       NVIC_SystemReset();
+        #if BOARD == EARHART_V1_0_0
+            uint8_t error[2]={uint8_t(line),uint8_t(status)};
+            sendTTN(219, error, 2);
+        #endif 
+        NVIC_SystemReset();
    }
 }
 
-void NodeFlow:: error_increment(int *errCnt)
+void NodeFlow::error_increment(int &errCnt, uint16_t line, bool &error) //, bool error
 {
     ErrorConfig e_conf;
     status = DataManager::read_file_entry(ErrorConfig_n, 0, e_conf.data, sizeof(e_conf.parameters));
-    if (status == NODEFLOW_OK)
-    {
-        e_conf.parameters.errCnt=1+e_conf.parameters.errCnt;
-        status= DataManager::overwrite_file_entries(ErrorConfig_n, e_conf.data, sizeof(e_conf.parameters));
-        if (status!=NODEFLOW_OK)
-        {
-            ErrorHandler(__LINE__,"IncrementConfig",status,__PRETTY_FUNCTION__); 
-        }
+    error=false;
+    uint16_t arr[20];
+    arr[e_conf.parameters.errCnt]=line;
+    for (int i = 0; i < e_conf.parameters.errCnt; i++) 
+    {   
+        arr[i]=e_conf.parameters.line_arr[i];
+        
+        if (e_conf.parameters.line_arr[i] ==  e_conf.parameters.line_arr[i+1] 
+            && e_conf.parameters.line_arr[i+1] == e_conf.parameters.line_arr[i+2]
+            && e_conf.parameters.errCnt>=STATUS_ERROR_TOLERANCE) 
+        {   
+            error=true;
+        } 
     }
-    *errCnt=e_conf.parameters.errCnt;
+
+    for (int i=0; i<e_conf.parameters.errCnt+1; i++)
+    {
+            e_conf.parameters.line_arr[i]=arr[i];
+    }
+    e_conf.parameters.errCnt=1+e_conf.parameters.errCnt;
+
+    if(e_conf.parameters.errCnt>19)
+    {
+        e_conf.parameters.errCnt=0;
+    }
+    status= DataManager::overwrite_file_entries(ErrorConfig_n, e_conf.data, sizeof(e_conf.parameters));
+    if (status!=NODEFLOW_OK)
+    {
+        ErrorHandler(__LINE__,"IncrementConfig",status,__PRETTY_FUNCTION__); 
+    }
+
+   errCnt=e_conf.parameters.errCnt;
 
 }
-
 
 
 
