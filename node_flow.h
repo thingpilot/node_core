@@ -177,15 +177,46 @@ union NextTimeConfig
     char data[sizeof(NextTimeConfig::parameters)];
 };
 
-union IncrementConfig
+union CounterConfig
+{
+    struct 
+    {    
+        uint16_t  counter; 
+    } parameters;
+
+    char data[sizeof(CounterConfig::parameters)];
+};
+
+
+union IncrementAConfig
 {
     struct 
     {    
         uint16_t  increment; 
     } parameters;
 
-    char data[sizeof(IncrementConfig::parameters)];
+    char data[sizeof(IncrementAConfig::parameters)];
 };
+
+union IncrementBConfig
+{
+    struct 
+    {    
+        uint32_t  increment; 
+    } parameters;
+
+    char data[sizeof(IncrementBConfig::parameters)];
+};
+union IncrementCConfig
+{
+    struct 
+    {    
+        uint32_t  increment; 
+    } parameters;
+
+    char data[sizeof(IncrementCConfig::parameters)];
+};
+
 
 /** Sensor Config,TempSensingGroupConfig, Time Config be used in later version 
  *  if the user wants to "register" each sensor for different reading times 
@@ -256,13 +287,16 @@ enum Filenames
     SchedulerConfig_n           = 2,
     ClockSynchConfig_n          = 3,
     FlagsConfig_n               = 4, 
-    IncrementConfig_n           = 5,
+    IncrementAConfig_n          = 5,
     SensingGroupConfig_n        = 6, 
     TimeConfig_n                = 7,
     TempSensingGroupConfig_n    = 8,
     NextTimeConfig_n            = 9,
     SendSchedulerConfig_n       = 10,
-    MetricGroupConfig_n         = 11
+    MetricGroupConfig_n         = 11,
+    IncrementBConfig_n          = 12,
+    IncrementCConfig_n          = 13,
+    CounterConfig_n             = 14
     
  };
 
@@ -367,18 +401,46 @@ class NodeFlow: public DataManager
          */
         void add_record(DataType data);
 
+        template <typename T>
+        void get_type(uint8_t& data_type, T data);
+
         /**Increment with a value.
          * 
          *@param i increment value
          */
-        int increment(int i);
+        int inc_a(int i);
 
         /**Read current increment value.
          * 
          *@param increment_value increment_value
          */
-        int read_increment(int *increment_value);
+        int read_inc_a(uint16_t& increment_value);
+
+        /**Increment with a value.
+         * 
+         *@param i increment value
+         */
+        int inc_b(int i);
+
+        /**Read current increment value.
+         * 
+         *@param increment_value increment_value
+         */
+        int read_inc_b(uint16_t& increment_value);
+        /**Increment with a value.
+         * 
+         *@param i increment value
+         */
+        int inc_c(int i);
+
+        /**Read current increment value.
+         * 
+         *@param increment_value increment_value
+         */
+        int read_inc_c(uint32_t& increment_value);
         
+
+        int counter(uint8_t& entries_counter);
 
     private:
 

@@ -22,6 +22,7 @@ int written_entries=0;
 #endif
 
 
+
 /** Constructor. Create a NodeFlow interface, connected to the pins specified 
  *  operating at the specified frequency
  * 
@@ -87,6 +88,11 @@ void NodeFlow::start()
     {   
         debug("\r\n--------------------PIN WAKEUP--------------------\r\n");
         HandleInterrupt(); /**Pure virtual function */
+
+        uint8_t entries_counter=0;
+        counter(entries_counter);
+        debug("\r\nCounter value: %d\r\n",entries_counter);
+
         status=get_interrupt_latency(&next_time);
         if (status != NODEFLOW_OK)
         {
@@ -180,6 +186,7 @@ void NodeFlow::start()
          
     }
     debug("\nGoing to sleep for %d ",next_time);
+    
     timetodate(time_now());
     enter_standby(next_time,true);
 }
@@ -250,8 +257,8 @@ int NodeFlow::initialise()
     SendSchedulerConfig_File_t.parameters.length_bytes = sizeof( SendSchedulerConfig::parameters);
     #if(SEND_SCHEDULER)
         #if BOARD == EARHART_V1_0_0
-            debug("\r\nWARNING!! SEND SCHEDULER IS ON FOR EARHART BOARD\r\n");
-            debug("\r\nVisit \r\n");
+            debug("\r\nWARNING!! SEND SCHEDULER IS ON FOR EARHART BOARD\r\nVisit https://www.loratools.nl/#/airtime to find out more\r\n");
+            
         #endif
         status=DataManager::add_file(SendSchedulerConfig_File_t, MAX_BUFFER_SENDING_TIMES+2); 
     #endif
@@ -312,28 +319,97 @@ int NodeFlow::initialise()
 
     status=set_flags_config(0);  //TODO: CHECK INIT FLAGS (IF HEART BEAT IS TRUE THEN CHANGE ALL FLAGS TO TRUE?)
 
-    /** IncrementConfig
+    /** IncrementAConfig
      */
-    DataManager_FileSystem::File_t IncrementConfig_File_t;
-    IncrementConfig_File_t.parameters.filename = IncrementConfig_n;
-    IncrementConfig_File_t.parameters.length_bytes = sizeof(IncrementConfig::parameters);
+    DataManager_FileSystem::File_t IncrementAConfig_File_t;
+    IncrementAConfig_File_t.parameters.filename = IncrementAConfig_n;
+    IncrementAConfig_File_t.parameters.length_bytes = sizeof(IncrementAConfig::parameters);
 
-    status=DataManager::add_file(IncrementConfig_File_t, 1);
+    status=DataManager::add_file(IncrementAConfig_File_t, 1);
     if(status != NODEFLOW_OK)
     {
-        ErrorHandler(__LINE__,"IncrementConfig",status,__PRETTY_FUNCTION__);
+        ErrorHandler(__LINE__,"IncrementAConfig",status,__PRETTY_FUNCTION__);
         return status;   
     }
 
-    IncrementConfig i_conf;
+    IncrementAConfig i_conf;
     i_conf.parameters.increment=0;
 
-    status= DataManager::append_file_entry(IncrementConfig_n, i_conf.data, sizeof(i_conf.parameters));
+    status= DataManager::append_file_entry(IncrementAConfig_n, i_conf.data, sizeof(i_conf.parameters));
     if(status != NODEFLOW_OK)
     {
-        ErrorHandler(__LINE__,"IncrementConfig",status,__PRETTY_FUNCTION__);
+        ErrorHandler(__LINE__,"IncrementAConfig",status,__PRETTY_FUNCTION__);
         return status; 
     }
+
+    /** IncrementBConfig
+     */
+    DataManager_FileSystem::File_t IncrementBConfig_File_t;
+    IncrementBConfig_File_t.parameters.filename = IncrementBConfig_n;
+    IncrementBConfig_File_t.parameters.length_bytes = sizeof(IncrementBConfig::parameters);
+
+    status=DataManager::add_file(IncrementBConfig_File_t, 1);
+    if(status != NODEFLOW_OK)
+    {
+        ErrorHandler(__LINE__,"IncrementBConfig",status,__PRETTY_FUNCTION__);
+        return status;   
+    }
+
+    IncrementBConfig ib_conf;
+    ib_conf.parameters.increment=0;
+
+    status= DataManager::append_file_entry(IncrementBConfig_n, ib_conf.data, sizeof(ib_conf.parameters));
+    if(status != NODEFLOW_OK)
+    {
+        ErrorHandler(__LINE__,"IncrementBConfig",status,__PRETTY_FUNCTION__);
+        return status; 
+    }
+    /** IncrementCConfig
+     */
+    DataManager_FileSystem::File_t IncrementCConfig_File_t;
+    IncrementCConfig_File_t.parameters.filename = IncrementCConfig_n;
+    IncrementCConfig_File_t.parameters.length_bytes = sizeof(IncrementCConfig::parameters);
+
+    status=DataManager::add_file(IncrementCConfig_File_t, 1);
+    if(status != NODEFLOW_OK)
+    {
+        ErrorHandler(__LINE__,"IncrementBConfig",status,__PRETTY_FUNCTION__);
+        return status;   
+    }
+
+    IncrementCConfig ic_conf;
+    ic_conf.parameters.increment=0;
+
+    status= DataManager::append_file_entry(IncrementCConfig_n, ic_conf.data, sizeof(ic_conf.parameters));
+    if(status != NODEFLOW_OK)
+    {
+        ErrorHandler(__LINE__,"IncrementCConfig",status,__PRETTY_FUNCTION__);
+        return status; 
+    }
+
+     /** CounterConfig
+     */
+    DataManager_FileSystem::File_t CounterConfig_File_t;
+    CounterConfig_File_t.parameters.filename = CounterConfig_n;
+    CounterConfig_File_t.parameters.length_bytes = sizeof(CounterConfig::parameters);
+
+    status=DataManager::add_file(CounterConfig_File_t, 1);
+    if(status != NODEFLOW_OK)
+    {
+        ErrorHandler(__LINE__,"CounterConfig",status,__PRETTY_FUNCTION__);
+        return status;   
+    }
+
+    CounterConfig c_conf;
+    c_conf.parameters.counter=0;
+
+    status= DataManager::append_file_entry(CounterConfig_n, c_conf.data, sizeof(c_conf.parameters));
+    if(status != NODEFLOW_OK)
+    {
+        ErrorHandler(__LINE__,"CounterConfig",status,__PRETTY_FUNCTION__);
+        return status; 
+    }
+
 
     DataManager_FileSystem::File_t NextTimeConfig_File_t;
     NextTimeConfig_File_t.parameters.filename = NextTimeConfig_n;
@@ -377,7 +453,7 @@ int NodeFlow::HandleModem()
     status=read_sched_config(1,&sched_length);
     if (status!=NODEFLOW_OK)
     {
-        ErrorHandler(__LINE__,"read_sched_config",status,__PRETTY_FUNCTION__);
+        ErrorHandler(__LINE__,"Read_sched_config",status,__PRETTY_FUNCTION__);
         return status;
     }
 
@@ -426,7 +502,7 @@ int NodeFlow::HandleModem()
             ErrorHandler(__LINE__,"get_total_written_file_entries",status,__PRETTY_FUNCTION__);
             return status;
         }
-
+        
         int response_code=-1;
         uint8_t payload[written_entries];
         uint8_t nbiot_payload[written_entries+4];
@@ -446,6 +522,11 @@ int NodeFlow::HandleModem()
         printf("\r\n");
         /**TODO: NBIOT send */
         #if BOARD == WRIGHT_V1_0_0
+            int rsrp=0;
+            int rsrq=0;
+            _radio.get_csq(rsrp,rsrq);
+            debug("NBIOT last know RSRP %d and RSRQ %d",rsrp, rsrq);
+
             memcpy(nbiot_payload+4,payload,written_entries); /*Adds a part of the serial number 4 bytes*/
             memcpy(nbiot+4,payload,written_entries);
             debug("\r\nNBIOT Buffer(LSB)  = 0x");
@@ -483,9 +564,71 @@ int NodeFlow::HandleModem()
     return NODEFLOW_OK;
 }
 
-template <typename DataType>
+template<typename T>
+void NodeFlow::get_type(uint8_t& data_type, T data)
+{ 
+    data_type=0;
+   
+};
+
+
+template<> void NodeFlow::get_type<int8_t>(uint8_t& data_type, int8_t data)
+{ 
+    if(data>0)
+    {
+        data_type=24;
+    }
+    else
+    {
+        data_type=56;
+    }
+};
+template<> void NodeFlow::get_type<int16_t>(uint8_t& data_type,int16_t data)
+{ 
+    if(data>0)
+    {
+        data_type=25;
+    }
+    else
+    {
+        data_type=57;
+    } 
+};
+template<> void NodeFlow::get_type<int32_t>(uint8_t& data_type,int32_t data)
+{ 
+    if(data>0)
+    {
+        data_type=26;
+    }
+    else
+    {
+        data_type=58;
+    } 
+};
+template<> void NodeFlow::get_type<int64_t>(uint8_t& data_type,int64_t data)
+{ 
+    if(data>0)
+    {
+        data_type=27;
+    }
+    else
+    {
+        data_type=59;
+    } 
+};
+template<> void NodeFlow::get_type<uint8_t>(uint8_t& data_type, uint8_t data){ data_type=8; };
+template<> void NodeFlow::get_type<uint16_t>(uint8_t& data_type, uint16_t data){ data_type=16; };
+template<> void NodeFlow::get_type<uint32_t>(uint8_t& data_type, uint32_t data){ data_type=32; };
+template<> void NodeFlow::get_type<uint64_t>(uint8_t& data_type, uint64_t data){ data_type=64; };
+template<> void NodeFlow::get_type<float>(uint8_t& data_type,float data){ data_type=249; }; 
+
+template <typename DataType> 
 void NodeFlow::add_record(DataType data)
-{
+{   
+    //get_type<DataType>.data_type;
+    uint8_t value=0;
+    get_type<DataType>(value,data);
+    debug("Type: %d",value);
     uint8_t bytes[sizeof(DataType)];
     *(DataType *)(bytes)=data;
 
@@ -494,8 +637,9 @@ void NodeFlow::add_record(DataType data)
         uint8_t mg_flag;
         get_metric_flags(&mg_flag);
         add_sensing_entry(mg_flag); 
-
-        #if BOARD == WRIGHT_V1_0_0
+        
+        #if(SEND_SCHEDULER)
+       // #if BOARD == WRIGHT_V1_0_0
             time_t time_now=time(NULL);
             uint8_t time_bytes[4];
             *(time_t *)(time_bytes)=time_now;
@@ -528,6 +672,7 @@ template void NodeFlow::add_record<uint16_t>(uint16_t data);
 template void NodeFlow::add_record<uint32_t>(uint32_t data);
 template void NodeFlow::add_record<uint64_t>(uint64_t data);
 
+
 int NodeFlow::add_sensing_entry(uint8_t value)
 {
     SensorDataConfig t_conf;
@@ -545,46 +690,154 @@ int NodeFlow::add_sensing_entry(uint8_t value)
 
 /** How the user will erase the value?! daily, after sending?  
  */
-int NodeFlow::read_increment(int *increment_value)
+int NodeFlow::read_inc_a(uint16_t& increment_value)
 {
-    IncrementConfig i_conf;
-    status = DataManager::read_file_entry(IncrementConfig_n, 0, i_conf.data, sizeof(i_conf.parameters));
+    IncrementAConfig i_conf;
+    status = DataManager::read_file_entry(IncrementAConfig_n, 0, i_conf.data, sizeof(i_conf.parameters));
     if (status != NODEFLOW_OK)
     {
-        ErrorHandler(__LINE__,"IncrementConfig",status,__PRETTY_FUNCTION__);   
+        ErrorHandler(__LINE__,"IncrementAConfig",status,__PRETTY_FUNCTION__);   
     }
-    *increment_value=i_conf.parameters.increment;
+    increment_value=i_conf.parameters.increment;
 
     return status;
 }
 
-int NodeFlow::increment(int i)
+int NodeFlow::inc_a(int i)
 {
-    int increment_value;
-    status=read_increment(&increment_value);
+    uint16_t increment_value;
+    status=read_inc_a(increment_value);
     if (status == NODEFLOW_OK)
     {
-        IncrementConfig i_conf;
+        IncrementAConfig i_conf;
         i_conf.parameters.increment=i+increment_value;
-        status= DataManager::overwrite_file_entries(IncrementConfig_n, i_conf.data, sizeof(i_conf.parameters));
+        status= DataManager::overwrite_file_entries(IncrementAConfig_n, i_conf.data, sizeof(i_conf.parameters));
         if (status!=NODEFLOW_OK)
         {
-            ErrorHandler(__LINE__,"IncrementConfig",status,__PRETTY_FUNCTION__); 
+            ErrorHandler(__LINE__,"IncrementAConfig",status,__PRETTY_FUNCTION__); 
         }
     }
     return status;
 }
 
+int NodeFlow::read_inc_b(uint16_t& increment_value)
+{
+    IncrementBConfig i_conf;
+    status = DataManager::read_file_entry(IncrementBConfig_n, 0, i_conf.data, sizeof(i_conf.parameters));
+    if (status != NODEFLOW_OK)
+    {
+        ErrorHandler(__LINE__,"IncrementBConfig",status,__PRETTY_FUNCTION__);   
+    }
+    increment_value=i_conf.parameters.increment;
+
+    return status;
+}
+
+int NodeFlow::inc_b(int i)
+{
+    uint16_t increment_value;
+    status=read_inc_b(increment_value);
+    if (status == NODEFLOW_OK)
+    {
+        IncrementBConfig i_conf;
+        i_conf.parameters.increment=i+increment_value;
+        status= DataManager::overwrite_file_entries(IncrementBConfig_n, i_conf.data, sizeof(i_conf.parameters));
+        if (status!=NODEFLOW_OK)
+        {
+            ErrorHandler(__LINE__,"IncrementBConfig",status,__PRETTY_FUNCTION__); 
+        }
+    }
+    return status;
+}
+
+
+int NodeFlow::read_inc_c(uint32_t& increment_value)
+{
+    IncrementCConfig i_conf;
+    status = DataManager::read_file_entry(IncrementCConfig_n, 0, i_conf.data, sizeof(i_conf.parameters));
+    if (status != NODEFLOW_OK)
+    {
+        ErrorHandler(__LINE__,"IncrementCConfig",status,__PRETTY_FUNCTION__);   
+    }
+    increment_value=i_conf.parameters.increment;
+
+    return status;
+}
+
+int NodeFlow::inc_c(int i)
+{
+    uint32_t increment_value;
+    status=read_inc_c(increment_value);
+    if (status == NODEFLOW_OK)
+    {
+        IncrementCConfig i_conf;
+        i_conf.parameters.increment=i+increment_value;
+        status= DataManager::overwrite_file_entries(IncrementCConfig_n, i_conf.data, sizeof(i_conf.parameters));
+        if (status!=NODEFLOW_OK)
+        {
+            ErrorHandler(__LINE__,"IncrementCConfig",status,__PRETTY_FUNCTION__); 
+        }
+    }
+    return status;
+}
+
+
+int NodeFlow::counter(uint8_t& entries_counter)
+{
+    CounterConfig i_conf;
+    status = DataManager::read_file_entry(CounterConfig_n, 0, i_conf.data, sizeof(i_conf.parameters));
+    if (status == NODEFLOW_OK)
+    {
+        i_conf.parameters.counter=i_conf.parameters.counter+1;
+        status= DataManager::overwrite_file_entries(CounterConfig_n, i_conf.data, sizeof(i_conf.parameters));
+        if (status!=NODEFLOW_OK)
+        {
+            ErrorHandler(__LINE__,"EntriesCounterConfig",status,__PRETTY_FUNCTION__); 
+        }
+    }
+    entries_counter=i_conf.parameters.counter;
+    return status;
+
+}
+
 int NodeFlow::_clear_increment()
 {
-    IncrementConfig i_conf;
+    IncrementAConfig i_conf;
     i_conf.parameters.increment=0;
    
-    status= DataManager::overwrite_file_entries(IncrementConfig_n, i_conf.data, sizeof(i_conf.parameters));
+    status= DataManager::overwrite_file_entries(IncrementAConfig_n, i_conf.data, sizeof(i_conf.parameters));
     if (status!=NODEFLOW_OK)
     {
-        ErrorHandler(__LINE__,"IncrementConfig",status,__PRETTY_FUNCTION__);   
+        ErrorHandler(__LINE__,"IncrementAConfig",status,__PRETTY_FUNCTION__);   
     }
+
+    IncrementBConfig ib_conf;
+    ib_conf.parameters.increment=0;
+   
+    status= DataManager::overwrite_file_entries(IncrementBConfig_n, ib_conf.data, sizeof(ib_conf.parameters));
+    if (status!=NODEFLOW_OK)
+    {
+        ErrorHandler(__LINE__,"IncrementBConfig",status,__PRETTY_FUNCTION__);   
+    }
+
+    IncrementCConfig ic_conf;
+    ic_conf.parameters.increment=0;
+   
+    status= DataManager::overwrite_file_entries(IncrementCConfig_n, ic_conf.data, sizeof(ic_conf.parameters));
+    if (status!=NODEFLOW_OK)
+    {
+        ErrorHandler(__LINE__,"IncrementCConfig",status,__PRETTY_FUNCTION__);   
+    }
+
+    CounterConfig c_conf;
+    c_conf.parameters.counter=0;
+   
+    status= DataManager::overwrite_file_entries(CounterConfig_n, c_conf.data, sizeof(c_conf.parameters));
+    if (status!=NODEFLOW_OK)
+    {
+        ErrorHandler(__LINE__,"CounterConfig",status,__PRETTY_FUNCTION__);   
+    }
+
     return status;
 }
 /**TODO: Check for configuration from the server, those need to initialised with the other at start?! */
@@ -827,13 +1080,14 @@ int NodeFlow::append_sched_config(uint16_t time_comparator,uint8_t group_id)
  */
 int NodeFlow::init_send_sched_config()
 {       
-        #if(SEND_SCHEDULER)
-            status=overwrite_send_sched_config(SEND_SCHEDULER,SEND_SCHEDULER_SIZE);
-        #endif
+
         #if(!SEND_SCHEDULER)
             status=overwrite_send_sched_config(SEND_SCHEDULER,0);
         #endif
-    #if BOARD == WRIGHT_V1_0_0
+
+        #if(SEND_SCHEDULER)
+        status=overwrite_send_sched_config(SEND_SCHEDULER,SEND_SCHEDULER_SIZE);
+   // #if BOARD == WRIGHT_V1_0_0
         debug("\r\n---------------ADD SENDING TIMES-----------------\r\n");
         
         if(status != NODEFLOW_OK)
@@ -1208,15 +1462,16 @@ int NodeFlow::set_scheduler(uint32_t* next_timediff)
        set_reading_time(&timediff_temp);  
     } 
     ssck_flag.set(0);
-  
-    #if BOARD == EARHART_V1_0_0
+
+     #if(!SEND_SCHEDULER)
+    //#if BOARD == EARHART_V1_0_0
         ssck_flag.set(1);
     #endif
 
     if(sendschedulerOn)
     {
-        
-        #if BOARD == WRIGHT_V1_0_0
+        #if(SEND_SCHEDULER)
+       // #if BOARD == WRIGHT_V1_0_0
             uint16_t send_length;
             uint16_t sched_time_temp;
             read_send_sched_config(1,&send_length);
@@ -1558,7 +1813,7 @@ int NodeFlow::get_timestamp()
     #endif /* BOARD == EARHART_V1_0_0 */
 
     #if BOARD == WRIGHT_V1_0_0
-        //_radio.get_unix_time(&unix_time);
+       // _radio.get_unix_time(&unix_time);
     #endif
 
     time_t time_now=time(NULL);
@@ -1850,7 +2105,7 @@ void NodeFlow::error_increment(int &errCnt, uint16_t line, bool &error) //, bool
     status= DataManager::overwrite_file_entries(ErrorConfig_n, e_conf.data, sizeof(e_conf.parameters));
     if (status!=NODEFLOW_OK)
     {
-        ErrorHandler(__LINE__,"IncrementConfig",status,__PRETTY_FUNCTION__); 
+        ErrorHandler(__LINE__,"ErrorConfig",status,__PRETTY_FUNCTION__); 
     }
 
    errCnt=e_conf.parameters.errCnt;
