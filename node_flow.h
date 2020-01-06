@@ -399,7 +399,7 @@ class NodeFlow: public DataManager
          *
          *@param data Actual data to be written to the eeprom
          */
-        void add_record(DataType data);
+        void add_record(DataType data, string str1);
 
         template <typename T>
         void get_type(uint8_t& data_type, T data);
@@ -672,6 +672,10 @@ class NodeFlow: public DataManager
          */
         int HandleModem();
 
+        
+        int string_to_hex(const string& input_str1, string* output_str);
+        int wrapped_cbor_();
+        
         //TODO: MOVE THIS
         /**Adds a bytes of sensing entries added as record by the user.
          */
@@ -691,7 +695,7 @@ class NodeFlow: public DataManager
 
         /** Re-measures the sleeping time after an interrupt 
          */
-        int get_interrupt_latency(uint32_t *next_sch_time);
+        int get_interrupt_latency(uint32_t &next_sch_time);
 
         /** Holds the wakeup (full timestamp). 
             TODO: this will be used to check that we didn't missed a measurement while on program not implemented

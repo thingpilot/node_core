@@ -21,8 +21,6 @@ int written_entries=0;
     float scheduler[1];
 #endif
 
-
-
 /** Constructor. Create a NodeFlow interface, connected to the pins specified 
  *  operating at the specified frequency
  * 
@@ -74,7 +72,8 @@ int NodeFlow::initialise_nbiot()
     }
     return status;
 }
-#endif
+#endif /* #if BOARD == WRIGHT_V1_0_0 */
+
 /** Start the device. kick the watchdog, initialise files, 
  *  Find the Wakeup type. 
  */
@@ -91,9 +90,9 @@ void NodeFlow::start()
 
         uint8_t entries_counter=0;
         counter(entries_counter);
-        debug("\r\nCounter value: %d\r\n",entries_counter);
+        //debug("\r\nCounter value: %d\r\n",entries_counter);
 
-        status=get_interrupt_latency(&next_time);
+        status=get_interrupt_latency(next_time);
         if (status != NODEFLOW_OK)
         {
             ErrorHandler(__LINE__,"get_interrupt_latency", status,__PRETTY_FUNCTION__);
@@ -123,7 +122,7 @@ void NodeFlow::start()
                 ErrorHandler(__LINE__,"set_wakeup_pin_flag", status,__PRETTY_FUNCTION__);
             }
 
-            status=get_interrupt_latency(&next_time);
+            status=get_interrupt_latency(next_time);
             if (status != NODEFLOW_OK)
             {
                 ErrorHandler(__LINE__,"get_interrupt_latency", status,__PRETTY_FUNCTION__);
@@ -160,8 +159,7 @@ void NodeFlow::start()
        
         if(CLOCK_SYNCH)
         {
-            get_timestamp();
-           
+            get_timestamp();  
         }
         timetodate(time_now()); 
         status=init_sched_config();
@@ -218,6 +216,7 @@ int NodeFlow::initialise()
     status=DataManager::add_file(ErrorConfig_File_t, 1); 
     if(status != NODEFLOW_OK)
     {
+        //error in error
         return status;
     }
     ErrorConfig e_conf;
@@ -232,7 +231,7 @@ int NodeFlow::initialise()
     /** SchedulerConfig */
     DataManager_FileSystem::File_t SchedulerConfig_File_t;
     SchedulerConfig_File_t.parameters.filename = SchedulerConfig_n;  
-    SchedulerConfig_File_t.parameters.length_bytes = sizeof( SchedulerConfig::parameters);
+    SchedulerConfig_File_t.parameters.length_bytes = sizeof(SchedulerConfig::parameters);
 
     status=DataManager::add_file(SchedulerConfig_File_t, MAX_BUFFER_READING_TIMES+2); 
     if(status != NODEFLOW_OK)
@@ -623,16 +622,27 @@ template<> void NodeFlow::get_type<uint64_t>(uint8_t& data_type, uint64_t data){
 template<> void NodeFlow::get_type<float>(uint8_t& data_type,float data){ data_type=249; }; 
 
 template <typename DataType> 
-void NodeFlow::add_record(DataType data)
+void NodeFlow::add_record(DataType data, string str1)
 {   
-    //get_type<DataType>.data_type;
+    string output_str;
+    string_to_hex(str1, &output_str);
+
+    // string app_id_str;
+    // string dev_id_str;
+    // string_to_hex(app_id, &app_id_str);
+    // string_to_hex(dev_id, &dev_id_str);
+    //debug("App_id: %s, dev_id: %s", app_id_str.c_str(), dev_id_str.c_str());
+    debug("String: %s, HexStr: %s length: %d", str1.c_str(), output_str.c_str(), str1.length());
+    debug ("\r\n");
+
     uint8_t value=0;
     get_type<DataType>(value,data);
     debug("Type: %d",value);
+
     uint8_t bytes[sizeof(DataType)];
     *(DataType *)(bytes)=data;
 
-    if(written_entries == 0)
+    if(written_entries == 0) 
     {
         uint8_t mg_flag;
         get_metric_flags(&mg_flag);
@@ -662,16 +672,36 @@ void NodeFlow::add_record(DataType data)
     debug("\r\n");
 }
 
-template void NodeFlow::add_record<float>(float data);
-template void NodeFlow::add_record<int>(int data);
-template void NodeFlow::add_record<int8_t>(int8_t data);
-template void NodeFlow::add_record<int16_t>(int16_t data);
-template void NodeFlow::add_record<int64_t>(int64_t data);
-template void NodeFlow::add_record<uint8_t>(uint8_t data);
-template void NodeFlow::add_record<uint16_t>(uint16_t data);
-template void NodeFlow::add_record<uint32_t>(uint32_t data);
-template void NodeFlow::add_record<uint64_t>(uint64_t data);
+template void NodeFlow::add_record<float>(float data, string str1);
+template void NodeFlow::add_record<int>(int data, string str1);
+template void NodeFlow::add_record<int8_t>(int8_t data, string str1);
+template void NodeFlow::add_record<int16_t>(int16_t data, string str1);
+template void NodeFlow::add_record<int64_t>(int64_t data, string str1);
+template void NodeFlow::add_record<uint8_t>(uint8_t data, string str1);
+template void NodeFlow::add_record<uint16_t>(uint16_t data, string str1);
+template void NodeFlow::add_record<uint32_t>(uint32_t data, string str1);
+template void NodeFlow::add_record<uint64_t>(uint64_t data, string str1);
 
+int NodeFlow::string_to_hex(const string& input_str, string* output_str)
+{
+    static const char* const lut = "0123456789ABCDEF";
+    size_t len = input_str.length();
+
+    output_str->reserve(2 * len);
+    for (size_t i = 0; i < len; ++i)
+    {
+        const unsigned char c = input_str[i];
+        output_str->push_back(lut[c >> 4]);
+        output_str->push_back(lut[c & 15]);
+    }
+
+    return len;
+}
+
+// int NodeFlow::hex_metadata()
+// {
+
+// }
 
 int NodeFlow::add_sensing_entry(uint8_t value)
 {
@@ -1737,7 +1767,7 @@ int NodeFlow:: get_metric_flags(uint8_t *flag)
     *flag=mg_conf.parameters.metric_group_id;
     return status;
 }
-int NodeFlow::get_interrupt_latency(uint32_t *next_sch_time)
+int NodeFlow::get_interrupt_latency(uint32_t &next_sch_time)
 {
     NextTimeConfig t_conf;
     status=DataManager::read_file_entry(NextTimeConfig_n, 0, t_conf.data,sizeof(t_conf.parameters));
@@ -1748,7 +1778,7 @@ int NodeFlow::get_interrupt_latency(uint32_t *next_sch_time)
     }
     
     uint32_t temp=0;
-    *next_sch_time=t_conf.parameters.time_comparator-time_now();
+    next_sch_time=t_conf.parameters.time_comparator-time_now();
     
     return status;
 }
