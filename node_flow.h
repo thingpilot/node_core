@@ -439,8 +439,9 @@ class NodeFlow: public DataManager
          */
         int read_inc_c(uint32_t& increment_value);
         
-
+        //TODO: Private or public?
         int counter(uint8_t& entries_counter);
+        int read_counter(uint8_t &entries_counter);
 
     private:
 
@@ -672,10 +673,11 @@ class NodeFlow: public DataManager
          */
         int HandleModem();
 
-        
-        int string_to_hex(const string& input_str1, string* output_str);
-        int wrapped_cbor_();
-        
+        int cbor_object_string(const string& object_str, const string& input_str);
+        int cbor_object_payload_data(const string& object_str,int type_value);
+        int wrapped_cbor_general_data();
+        //template <typename DataType>
+        //int decimal_to_hex(DataType data, uint8_t* bytes);
         //TODO: MOVE THIS
         /**Adds a bytes of sensing entries added as record by the user.
          */
