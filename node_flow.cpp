@@ -16,12 +16,13 @@
  */
 int flags=NodeFlow::FLAG_UNKNOWN;
 int status = -1;
-int written_entries=0;
+int written_entries=0; 
+int cbor_entries=0;
+int record_entries=0;
+uint8_t cbor_sensing_entries[100];
 #if(SCHEDULER)
     float scheduler[1];
 #endif
-
-
 
 /** Constructor. Create a NodeFlow interface, connected to the pins specified 
  *  operating at the specified frequency
@@ -74,7 +75,8 @@ int NodeFlow::initialise_nbiot()
     }
     return status;
 }
-#endif
+#endif /* #if BOARD == WRIGHT_V1_0_0 */
+
 /** Start the device. kick the watchdog, initialise files, 
  *  Find the Wakeup type. 
  */
@@ -89,11 +91,7 @@ void NodeFlow::start()
         debug("\r\n--------------------PIN WAKEUP--------------------\r\n");
         HandleInterrupt(); /**Pure virtual function */
 
-        uint8_t entries_counter=0;
-        counter(entries_counter);
-        debug("\r\nCounter value: %d\r\n",entries_counter);
-
-        status=get_interrupt_latency(&next_time);
+        status=get_interrupt_latency(next_time);
         if (status != NODEFLOW_OK)
         {
             ErrorHandler(__LINE__,"get_interrupt_latency", status,__PRETTY_FUNCTION__);
@@ -123,7 +121,7 @@ void NodeFlow::start()
                 ErrorHandler(__LINE__,"set_wakeup_pin_flag", status,__PRETTY_FUNCTION__);
             }
 
-            status=get_interrupt_latency(&next_time);
+            status=get_interrupt_latency(next_time);
             if (status != NODEFLOW_OK)
             {
                 ErrorHandler(__LINE__,"get_interrupt_latency", status,__PRETTY_FUNCTION__);
@@ -160,8 +158,7 @@ void NodeFlow::start()
        
         if(CLOCK_SYNCH)
         {
-            get_timestamp();
-           
+            get_timestamp();  
         }
         timetodate(time_now()); 
         status=init_sched_config();
@@ -218,6 +215,7 @@ int NodeFlow::initialise()
     status=DataManager::add_file(ErrorConfig_File_t, 1); 
     if(status != NODEFLOW_OK)
     {
+        //error in error
         return status;
     }
     ErrorConfig e_conf;
@@ -232,7 +230,7 @@ int NodeFlow::initialise()
     /** SchedulerConfig */
     DataManager_FileSystem::File_t SchedulerConfig_File_t;
     SchedulerConfig_File_t.parameters.filename = SchedulerConfig_n;  
-    SchedulerConfig_File_t.parameters.length_bytes = sizeof( SchedulerConfig::parameters);
+    SchedulerConfig_File_t.parameters.length_bytes = sizeof(SchedulerConfig::parameters);
 
     status=DataManager::add_file(SchedulerConfig_File_t, MAX_BUFFER_READING_TIMES+2); 
     if(status != NODEFLOW_OK)
@@ -257,7 +255,7 @@ int NodeFlow::initialise()
     SendSchedulerConfig_File_t.parameters.length_bytes = sizeof( SendSchedulerConfig::parameters);
     #if(SEND_SCHEDULER)
         #if BOARD == EARHART_V1_0_0
-            debug("\r\nWARNING!! SEND SCHEDULER IS ON FOR EARHART BOARD\r\nVisit https://www.loratools.nl/#/airtime to find out more\r\n");
+            debug("\r\nWARNING!! SEND SCHEDULER IS ON FOR EARHART BOARD\r\nVisit https://www.loratools.nl/#/airtime to find \r\nout more. Max payload size supported 255 bytes\r\n");
             
         #endif
         status=DataManager::add_file(SendSchedulerConfig_File_t, MAX_BUFFER_SENDING_TIMES+2); 
@@ -461,6 +459,10 @@ int NodeFlow::HandleModem()
         flags==NodeFlow::FLAG_SENSE_SEND_SYNCH||flags==NodeFlow::FLAG_SENSE_SYNCH)
     {
         
+        uint8_t entries_counter=0;
+        counter(entries_counter);
+        debug("\r\nEntries (should be always one for lora): %d\r\n",entries_counter);
+
         if (sched_length>1)
         {   
             uint8_t mg_flag;
@@ -470,7 +472,8 @@ int NodeFlow::HandleModem()
             
             if(flags.test(0)==1)
             {
-                MetricGroupA(); 
+                MetricGroupA();
+
             }
 
             if(flags.test(1)==1)
@@ -489,13 +492,21 @@ int NodeFlow::HandleModem()
         else
         {
             MetricGroupA(); 
-        }   
+        }
+        //TODO: add to Telemetry driver
+        add_sensing_entry(record_entries+161);
+        for (int i=0; i<cbor_entries; i++)
+        {
+            add_sensing_entry(cbor_sensing_entries[i]);
+        } 
               
     }
 
     if(flags==NodeFlow::FLAG_SENDING||flags==NodeFlow::FLAG_SENSE_SEND||
         flags==NodeFlow::FLAG_SEND_SYNCH||flags==NodeFlow::FLAG_SENSE_SEND_SYNCH)
     { 
+
+        //TODO: add to Telemetry driver
         status= DataManager::get_total_written_file_entries(SensorDataConfig_n, written_entries);
         if(status != NODEFLOW_OK)
         {
@@ -616,61 +627,122 @@ template<> void NodeFlow::get_type<int64_t>(uint8_t& data_type,int64_t data)
         data_type=59;
     } 
 };
-template<> void NodeFlow::get_type<uint8_t>(uint8_t& data_type, uint8_t data){ data_type=8; };
-template<> void NodeFlow::get_type<uint16_t>(uint8_t& data_type, uint16_t data){ data_type=16; };
-template<> void NodeFlow::get_type<uint32_t>(uint8_t& data_type, uint32_t data){ data_type=32; };
-template<> void NodeFlow::get_type<uint64_t>(uint8_t& data_type, uint64_t data){ data_type=64; };
+template<> void NodeFlow::get_type<uint8_t>(uint8_t& data_type, uint8_t data){ data_type=24; };
+template<> void NodeFlow::get_type<uint16_t>(uint8_t& data_type, uint16_t data){ data_type=25; };
+template<> void NodeFlow::get_type<uint32_t>(uint8_t& data_type, uint32_t data){ data_type=26; };
+template<> void NodeFlow::get_type<uint64_t>(uint8_t& data_type, uint64_t data){ data_type=27; };
 template<> void NodeFlow::get_type<float>(uint8_t& data_type,float data){ data_type=249; }; 
 
 template <typename DataType> 
-void NodeFlow::add_record(DataType data)
+void NodeFlow::add_record(DataType data, string str1)
 {   
-    //get_type<DataType>.data_type;
+    /* */
+    record_entries++;
     uint8_t value=0;
-    get_type<DataType>(value,data);
-    debug("Type: %d",value);
+    get_type<DataType>(value,data); //value==datatype
+    if (data<0)
+    {
+        data=-1-data;
+    }
+    
     uint8_t bytes[sizeof(DataType)];
     *(DataType *)(bytes)=data;
-
-    if(written_entries == 0)
+    
+    if(written_entries == 0) 
     {
+        wrapped_cbor_general_data();
+        add_sensing_entry(1);
         uint8_t mg_flag;
         get_metric_flags(&mg_flag);
-        add_sensing_entry(mg_flag); 
-        
-        #if(SEND_SCHEDULER)
-       // #if BOARD == WRIGHT_V1_0_0
+        add_sensing_entry(mg_flag+198); //TODO: change 
+
+
+        //#if(SEND_SCHEDULER) //TODO: Change to normal if read from the eeprom/ user could change
             time_t time_now=time(NULL);
             uint8_t time_bytes[4];
             *(time_t *)(time_bytes)=time_now;
+            cbor_object_payload_data("TS", 26);
+             debug("Time in hex:");
             for (int i=0; i<4; i++)
             {
                 debug("[ 0x%.2x]", time_bytes[i]);
-                add_sensing_entry(time_bytes[4-i]);
+                cbor_sensing_entries[cbor_entries]=time_bytes[i];
+                cbor_entries++;
+                //add_sensing_entry(time_bytes[4-i]);
             }
-        debug("\r\n");
-        #endif
+            debug("\r\n");
+        //#endif
         written_entries=5;
     }
     debug("Bytes = ");
-   
+
+    cbor_object_payload_data(str1,value);
     for (int i=sizeof(DataType); i>0; i--)
     {
         debug("[ 0x%.2x]", bytes[i-1]);
-        add_sensing_entry(bytes[i-1]);
+        cbor_sensing_entries[cbor_entries]=bytes[i-1];
+        cbor_entries++;
+       // add_sensing_entry(bytes[i-1]);
     }
     debug("\r\n");
 }
 
-template void NodeFlow::add_record<float>(float data);
-template void NodeFlow::add_record<int>(int data);
-template void NodeFlow::add_record<int8_t>(int8_t data);
-template void NodeFlow::add_record<int16_t>(int16_t data);
-template void NodeFlow::add_record<int64_t>(int64_t data);
-template void NodeFlow::add_record<uint8_t>(uint8_t data);
-template void NodeFlow::add_record<uint16_t>(uint16_t data);
-template void NodeFlow::add_record<uint32_t>(uint32_t data);
-template void NodeFlow::add_record<uint64_t>(uint64_t data);
+template void NodeFlow::add_record<float>(float data, string str1);
+template void NodeFlow::add_record<int>(int data, string str1);
+template void NodeFlow::add_record<int8_t>(int8_t data, string str1);
+template void NodeFlow::add_record<int16_t>(int16_t data, string str1);
+template void NodeFlow::add_record<int64_t>(int64_t data, string str1);
+template void NodeFlow::add_record<uint8_t>(uint8_t data, string str1);
+template void NodeFlow::add_record<uint16_t>(uint16_t data, string str1);
+template void NodeFlow::add_record<uint32_t>(uint32_t data, string str1);
+template void NodeFlow::add_record<uint64_t>(uint64_t data, string str1);
+
+int NodeFlow::cbor_object_string(const string& object_str, const string& input_str)
+{   
+    size_t o_len = object_str.length();
+    add_sensing_entry(96+o_len);
+    for (size_t i = 0; i < o_len; ++i)
+    {
+        add_sensing_entry(object_str[i]);
+    }
+
+    size_t len = input_str.length();
+    add_sensing_entry(96+len);
+    for (size_t i = 0; i < len; ++i)
+    {
+        add_sensing_entry(input_str[i]);
+    }
+
+    return len;
+}
+
+int NodeFlow::cbor_object_payload_data(const string& object_str, int type_value) //data_type(CBOR CODE)
+{
+    size_t o_len = object_str.length();
+    cbor_sensing_entries[cbor_entries]=96+o_len;
+    cbor_entries++;
+    for (size_t i = 0; i < o_len; ++i)
+    {
+        cbor_sensing_entries[cbor_entries]=object_str[i];
+        cbor_entries++;
+    }
+    
+    cbor_sensing_entries[cbor_entries]=type_value;
+    cbor_entries++;
+
+    return NODEFLOW_OK;
+}
+
+int NodeFlow::wrapped_cbor_general_data()
+{
+    //add_sensing_entry(163); //TODO: map 5 if more then it should increased, automatic?! if added at the end it will be automatic 164+ entries (decimal value)
+    // cbor_object_string("app_id",app_id);
+    // cbor_object_string("dev_id",dev_id);
+    // cbor_object_string("sn","00D5");
+    cbor_object_string("MOD","NBIOT");
+   
+    return NODEFLOW_OK;
+}
 
 
 int NodeFlow::add_sensing_entry(uint8_t value)
@@ -686,9 +758,7 @@ int NodeFlow::add_sensing_entry(uint8_t value)
     return status;
 }
 
-
-
-/** How the user will erase the value?! daily, after sending?  
+/** How the user will erase the value?! daily, after sending?  TODO:ASK CAUSE THIS IS A DIFF INCREMENT
  */
 int NodeFlow::read_inc_a(uint16_t& increment_value)
 {
@@ -798,6 +868,17 @@ int NodeFlow::counter(uint8_t& entries_counter)
     entries_counter=i_conf.parameters.counter;
     return status;
 
+}
+int NodeFlow::read_counter(uint8_t &entries_counter)
+{
+    CounterConfig i_conf;
+    status = DataManager::read_file_entry(CounterConfig_n, 0, i_conf.data, sizeof(i_conf.parameters));
+    if (status != NODEFLOW_OK)
+    {
+        ErrorHandler(__LINE__,"EntriesCounterConfig",status,__PRETTY_FUNCTION__); 
+    }
+    entries_counter=i_conf.parameters.counter;
+    return status;
 }
 
 int NodeFlow::_clear_increment()
@@ -1737,7 +1818,7 @@ int NodeFlow:: get_metric_flags(uint8_t *flag)
     *flag=mg_conf.parameters.metric_group_id;
     return status;
 }
-int NodeFlow::get_interrupt_latency(uint32_t *next_sch_time)
+int NodeFlow::get_interrupt_latency(uint32_t &next_sch_time)
 {
     NextTimeConfig t_conf;
     status=DataManager::read_file_entry(NextTimeConfig_n, 0, t_conf.data,sizeof(t_conf.parameters));
@@ -1748,7 +1829,7 @@ int NodeFlow::get_interrupt_latency(uint32_t *next_sch_time)
     }
     
     uint32_t temp=0;
-    *next_sch_time=t_conf.parameters.time_comparator-time_now();
+    next_sch_time=t_conf.parameters.time_comparator-time_now();
     
     return status;
 }
@@ -1851,7 +1932,7 @@ int NodeFlow::timetodate(uint32_t remainder_time)
 
 int NodeFlow::sendTTN(uint8_t port, uint8_t payload[], uint16_t length)
 {
-    status=_radio.join(CLASS_A);
+    status=_radio.join(CLASS_C);
     if(status < NODEFLOW_OK)
     {
         ErrorHandler(__LINE__,"FAILED TO JOIN",status,__PRETTY_FUNCTION__);
