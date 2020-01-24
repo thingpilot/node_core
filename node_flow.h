@@ -13,16 +13,14 @@
 #include "config_device.h"
 #include "DataManager.h"
 #include "TPL5010.h"
-#include "rtos.h"
-#include <cmath>
 #include "tp_sleep_manager.h"
+#include "tformatter.h"
+#include <cmath>
 #include <bitset>
-
 #include "platform/mbed_assert.h"
 #include "platform/mbed_debug.h"
 #include "platform/mbed_error.h"
 #include "platform/mbed_stats.h"
-
 
 #if BOARD == EARHART_V1_0_0
     #include "LorawanTP.h"
@@ -62,7 +60,7 @@
 #endif
 
 #if(SEND_SCHEDULER)
-     extern float nbiot_send_scheduler[];
+     extern float send_scheduler[];
 #endif
 
 #define MAX_BUFFER_SENDING_TIMES 10
@@ -89,7 +87,7 @@ union DeviceConfig
  *  I think 
  */
 
-union SensorDataConfig
+union MetricGroupAConfig
 {
     struct 
     {
@@ -97,7 +95,57 @@ union SensorDataConfig
 
     } parameters;
 
-    char data[sizeof(SensorDataConfig::parameters)];
+    char data[sizeof(MetricGroupAConfig::parameters)];
+};
+#if (SCHEDULER_B || METRIC_GROUPS_ON==2)
+union MetricGroupBConfig
+{
+    struct 
+    {
+        uint16_t byte;
+
+    } parameters;
+
+    char data[sizeof(MetricGroupAConfig::parameters)];
+};
+#endif
+#if (SCHEDULER_C || METRIC_GROUPS_ON==3)
+union MetricGroupCConfig
+{
+    struct 
+    {
+        uint16_t byte;
+
+    } parameters;
+
+    char data[sizeof(MetricGroupAConfig::parameters)];
+};
+#endif
+#if (SCHEDULER_D || METRIC_GROUPS_ON==4)
+union MetricGroupDConfig
+{
+    struct 
+    {
+        uint16_t byte;
+
+    } parameters;
+
+    char data[sizeof(MetricGroupAConfig::parameters)];
+};
+#endif
+
+union MetricGroupEntriesConfig
+{
+    struct 
+    {
+        uint8_t MetricGroupAEntries;
+        uint8_t MetricGroupBEntries;
+        uint8_t MetricGroupCEntries;
+        uint8_t MetricGroupDEntries;
+
+    } parameters;
+
+    char data[sizeof(MetricGroupEntriesConfig::parameters)];
 };
 
 /** The User can define MAX_BUFFER_READING_TIMES 
@@ -177,15 +225,15 @@ union NextTimeConfig
     char data[sizeof(NextTimeConfig::parameters)];
 };
 
-union CounterConfig
-{
-    struct 
-    {    
-        uint16_t  counter; 
-    } parameters;
+// union CounterConfig
+// {
+//     struct 
+//     {    
+//         uint16_t  counter; 
+//     } parameters;
 
-    char data[sizeof(CounterConfig::parameters)];
-};
+//     char data[sizeof(CounterConfig::parameters)];
+// };
 
 
 union IncrementAConfig
@@ -283,7 +331,7 @@ union ErrorConfig
 enum Filenames
 {
     ErrorConfig_n               = 0, /**Holds an increment of concecutives errors */
-    SensorDataConfig_n          = 1, 
+    MetricGroupAConfig_n        = 1, 
     SchedulerConfig_n           = 2,
     ClockSynchConfig_n          = 3,
     FlagsConfig_n               = 4, 
@@ -296,7 +344,11 @@ enum Filenames
     MetricGroupConfig_n         = 11,
     IncrementBConfig_n          = 12,
     IncrementCConfig_n          = 13,
-    CounterConfig_n             = 14
+    //CounterConfig_n             = 14,
+    MetricGroupBConfig_n        = 15,
+    MetricGroupCConfig_n        = 16,
+    MetricGroupDConfig_n        = 17,
+    MetricGroupEntriesConfig_n  = 18
     
  };
 
@@ -399,11 +451,9 @@ class NodeFlow: public DataManager
          *
          *@param data Actual data to be written to the eeprom
          */
-        void add_record(DataType data, string str1);
+        void add_record(DataType data, string str1=NULL);
 
-        template <typename T>
-        void get_type(uint8_t& data_type, T data);
-
+        
         /**Increment with a value.
          * 
          *@param i increment value
@@ -439,9 +489,9 @@ class NodeFlow: public DataManager
          */
         int read_inc_c(uint32_t& increment_value);
         
-        //TODO: Private or public?
-        int counter(uint8_t& entries_counter);
-        int read_counter(uint8_t &entries_counter);
+        // int counter(uint8_t& entries_counter); //todo remove?
+        // int read_counter(uint8_t &entries_counter);
+
 
     private:
 
@@ -517,7 +567,7 @@ class NodeFlow: public DataManager
          * @return          It could be one of these:
          *                  
          */        
-        int set_reading_time(uint32_t* time); 
+        int set_reading_time(uint32_t* time=NULL); 
 
         /** Fixes the next reading times after interrupt/clock etc interrupt for each group differently
          *                 
@@ -667,21 +717,45 @@ class NodeFlow: public DataManager
          *                      ..
          *                      MetricGroupA&&B&&C&&D = dec(15)
          */
-        int get_metric_flags(uint8_t *flag);
+        int get_metric_flags(uint8_t &flag);
 
         /** Handle Modem. Handles communication with the server in case of sense or send flag.
          */
         int HandleModem();
 
         int cbor_object_string(const string& object_str, const string& input_str);
-        int cbor_object_payload_data(const string& object_str,int type_value);
+        int add_cbor_payload_data(uint8_t metric_group_flag);
         int wrapped_cbor_general_data();
         //template <typename DataType>
         //int decimal_to_hex(DataType data, uint8_t* bytes);
         //TODO: MOVE THIS
         /**Adds a bytes of sensing entries added as record by the user.
          */
-        int add_sensing_entry(uint8_t value);
+        int add_sensing_entry(uint8_t value, uint8_t metric_group);
+
+        void is_overflow(uint8_t mg_group);
+
+        /**Counter for each metric group entry
+         * 
+         *@param mg_flag which metric group to increment
+         */
+        int mg_counter( uint8_t mg_flag);
+
+        /**Read current counter for each metric group entry
+         * 
+         *@return mg_entries for each group
+         */
+        int read_mg_counter(uint16_t& mga_entries, uint16_t& mgc_entries,uint16_t& mgd_entries, uint16_t& mgb_entries,uint8_t& metric_group_active);
+        
+        /**Read current bytes written for each metric group
+         * 
+         *@return mg_bytes for each mgroup
+         */
+        int read_mg_bytes(int& mga_bytes, int& mgb_bytes, int& mgc_bytes,int& mgd_bytes); 
+
+        /**Clear all entries 
+         */
+        int clear_mg_counter();
 
         /**Clears the increment/s.
          */
@@ -702,7 +776,7 @@ class NodeFlow: public DataManager
         /** Holds the wakeup (full timestamp). 
             TODO: this will be used to check that we didn't missed a measurement while on program not implemented
          */
-        int ovewrite_wakeup_timestamp(uint16_t time_remainder);
+        int overwrite_wakeup_timestamp(uint16_t time_remainder);
 
         /** Manage device sleep times before calling sleep_manager.standby().
          *  Ensure that the maximum time the device can sleep for is 6600 seconds,
@@ -723,6 +797,10 @@ class NodeFlow: public DataManager
          */
         TP_Sleep_Manager sleep_manager;
 
+        /** Instance of TFormatter to handle serialisation of the data 
+         */
+        TFormatter tformatter;
+       
 
         /** LORAWAN **************************************************************************************************/
         #if BOARD == EARHART_V1_0_0
