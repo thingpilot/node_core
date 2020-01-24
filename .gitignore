@@ -2,3 +2,13 @@
 tpl5010_watchdog_driver
 
 mbed-semtech-lora-rf-drivers
+BUILD
+.mbed
+thingpilot_telemetry_formatter
+mbed-os
+node_core_data_manager
+sara_n2_driver
+stm24256_eeprom_driver
+thingpilot_nbiot
+thingpilot_semtech_lora
+tp_sleep_manager
