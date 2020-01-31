@@ -1,15 +1,17 @@
 /**
  ******************************************************************************
  * @file    NodeFLow.h
- * @version 0.3.0
+ * @version 0.4.0
  * @author  Rafaella Nofytou,  Adam Mitchell
  * @brief   Header file of the Wright || Earheart node from Think Pilot. 
  * Handles sleeping times/ eeprom driver/ lorawan/ nb-iot communication
  ******************************************************************************
  */
-
+#pragma once
 /** Includes
  */
+
+#include "mbed.h"
 #include "config_device.h"
 #include "DataManager.h"
 #include "TPL5010.h"
@@ -17,10 +19,16 @@
 #include "tformatter.h"
 #include <cmath>
 #include <bitset>
-#include "platform/mbed_assert.h"
-#include "platform/mbed_debug.h"
-#include "platform/mbed_error.h"
-#include "platform/mbed_stats.h"
+
+// #include "platform/mbed_assert.h"
+// #include "platform/mbed_debug.h"
+// #include "platform/mbed_error.h"
+// #include "platform/mbed_stats.h"
+
+
+extern Serial pc;
+
+#define NODEFLOW_DBG true
 
 #if BOARD == EARHART_V1_0_0
     #include "LorawanTP.h"
@@ -35,16 +43,19 @@
 #define size(x)  (sizeof(x) / sizeof((x)[0]))
 #define DIVIDE(x) (x)/2
 
-/**Time related defines 
+/** Time related defines 
  */
 #define DAYINSEC    86400
 #define HOURINSEC   3600
 #define MINUTEINSEC 60
 
-/**DEFINE RETRIES FOR SENDING*/
+/** Define retries for sending
+ */
 #define MAX_SEND_RETRIES 3
 #define MAX_OVERWRITE_RETRIES 3
 
+/**
+ */
 #if (SCHEDULER)
     #define SCHEDULER_SIZE (SCHEDULER_A_SIZE + SCHEDULER_B_SIZE + SCHEDULER_C_SIZE + SCHEDULER_D_SIZE)
     extern float scheduler[]; 
@@ -56,7 +67,7 @@
 
 #if(!SCHEDULER)
     #define SCHEDULER_SIZE METRIC_GROUPS_ON
-    extern float scheduler[]; //CHANGE TO INTERVALS
+    extern float scheduler[]; 
 #endif
 
 #if(SEND_SCHEDULER)
@@ -77,15 +88,14 @@ union DeviceConfig
     struct 
     {
         uint32_t device_sn; //Device unique id?! our unique id?
-        uint8_t modulation; //defined 0 or 1 for lora, nbiot respectively,    
-    } parameters;
-
-    char data[sizeof(DeviceConfig::parameters)];
+        uint8_t modulation; //defined 0 or 1 for lora, nbiot respectively,
+        uint8_t APPEUI[8];
+        uint8_t DEVEUI[8];
+        uint8_t APPKEY[16];
+        
+    } parameters;    char data[sizeof(DeviceConfig::parameters)];
 };
 
-/** We need to agree on what this shoud be, data formatter? 
- *  I think 
- */
 
 union MetricGroupAConfig
 {
@@ -97,41 +107,41 @@ union MetricGroupAConfig
 
     char data[sizeof(MetricGroupAConfig::parameters)];
 };
-#if (SCHEDULER_B || METRIC_GROUPS_ON==2)
-union MetricGroupBConfig
-{
-    struct 
+#if (SCHEDULER_B || METRIC_GROUPS_ON==4 ||METRIC_GROUPS_ON==3 || METRIC_GROUPS_ON==2)
+    union MetricGroupBConfig
     {
-        uint16_t byte;
+        struct 
+        {
+            uint16_t byte;
 
-    } parameters;
+        } parameters;
 
-    char data[sizeof(MetricGroupAConfig::parameters)];
-};
+        char data[sizeof(MetricGroupBConfig::parameters)];
+    };
 #endif
-#if (SCHEDULER_C || METRIC_GROUPS_ON==3)
-union MetricGroupCConfig
-{
-    struct 
+#if (SCHEDULER_C || METRIC_GROUPS_ON==4 || METRIC_GROUPS_ON==3)
+    union MetricGroupCConfig
     {
-        uint16_t byte;
+        struct 
+        {
+            uint16_t byte;
 
-    } parameters;
+        } parameters;
 
-    char data[sizeof(MetricGroupAConfig::parameters)];
-};
+        char data[sizeof(MetricGroupCConfig::parameters)];
+    };
 #endif
 #if (SCHEDULER_D || METRIC_GROUPS_ON==4)
-union MetricGroupDConfig
-{
-    struct 
+    union MetricGroupDConfig
     {
-        uint16_t byte;
+        struct 
+        {
+            uint16_t byte;
 
-    } parameters;
+        } parameters;
 
-    char data[sizeof(MetricGroupAConfig::parameters)];
-};
+        char data[sizeof(MetricGroupDConfig::parameters)];
+    };
 #endif
 
 union MetricGroupEntriesConfig
@@ -154,7 +164,7 @@ union SchedulerConfig
 {
     struct 
     {   
-        uint16_t time_comparator; //first value holds status, second holds length of the array
+        uint16_t time_comparator; 
         uint8_t group_id;
         
     } parameters;
@@ -181,7 +191,7 @@ union SendSchedulerConfig
 {
     struct 
     {   
-        uint16_t time_comparator; //first value holds status, second holds length of the array
+        uint16_t time_comparator; 
         
     } parameters;
 
@@ -200,7 +210,7 @@ union ClockSynchConfig
     char data[sizeof(ClockSynchConfig::parameters)];
 };
 
-/** Program specific flags. Its every bit is a different flag. 0:SENSE, 1:SEND, 2:CLOCK, 3:KICK
+/** Program specific flags. Every bit is a different flag. 0:SENSE, 1:SEND, 2:CLOCK, 3:KICK
  */
 union FlagsConfig
 {
@@ -224,17 +234,6 @@ union NextTimeConfig
 
     char data[sizeof(NextTimeConfig::parameters)];
 };
-
-// union CounterConfig
-// {
-//     struct 
-//     {    
-//         uint16_t  counter; 
-//     } parameters;
-
-//     char data[sizeof(CounterConfig::parameters)];
-// };
-
 
 union IncrementAConfig
 {
@@ -264,7 +263,6 @@ union IncrementCConfig
 
     char data[sizeof(IncrementCConfig::parameters)];
 };
-
 
 /** Sensor Config,TempSensingGroupConfig, Time Config be used in later version 
  *  if the user wants to "register" each sensor for different reading times 
@@ -314,7 +312,6 @@ union TimeConfig
     char data[sizeof(TimeConfig::parameters)];
 };
 
-
 union ErrorConfig
 {
     struct 
@@ -344,11 +341,10 @@ enum Filenames
     MetricGroupConfig_n         = 11,
     IncrementBConfig_n          = 12,
     IncrementCConfig_n          = 13,
-    //CounterConfig_n             = 14,
-    MetricGroupBConfig_n        = 15,
-    MetricGroupCConfig_n        = 16,
-    MetricGroupDConfig_n        = 17,
-    MetricGroupEntriesConfig_n  = 18
+    MetricGroupBConfig_n        = 14,
+    MetricGroupCConfig_n        = 15,
+    MetricGroupDConfig_n        = 16,
+    MetricGroupEntriesConfig_n  = 17
     
  };
 
@@ -522,7 +518,7 @@ class NodeFlow: public DataManager
          * @return          Time
          *                  
          */ 
-        int timetodate(uint32_t remainder_time);
+        void timetodate(uint32_t remainder_time);
 
 
         /** Converts the time given from the user in HH.MM fromat to seconds
@@ -665,7 +661,7 @@ class NodeFlow: public DataManager
          *                      FLAG_SENSE_SEND_SYNCH
          *                      FLAG_UNKNOWN
          */
-        int get_flags();
+        int get_wakeup_flags();
 
 
         /** Set flags. 4 flags for sensing, sending, clock synchronisation and kick the watchdog
@@ -701,7 +697,7 @@ class NodeFlow: public DataManager
          *                      ..
          *                      MetricGroupA&&B&&C&&D = dec(15)
          */
-        int overwrite_metric_flags(uint8_t mybit_int);
+        int overwrite_metric_flags(uint8_t ssck_flag);
 
         /** Get metric flags are used for each of the groups A to D in order to handle each group after a wakeup timer. 
          *
@@ -733,7 +729,7 @@ class NodeFlow: public DataManager
          */
         int add_sensing_entry(uint8_t value, uint8_t metric_group);
 
-        void is_overflow(uint8_t mg_group);
+        void is_overflow(uint8_t &wakeup_flag);
 
         /**Counter for each metric group entry
          * 
@@ -745,29 +741,18 @@ class NodeFlow: public DataManager
          * 
          *@return mg_entries for each group
          */
-        int read_mg_counter(uint16_t& mga_entries, uint16_t& mgc_entries,uint16_t& mgd_entries, uint16_t& mgb_entries,uint8_t& metric_group_active);
+        int read_mg_counter(uint16_t& mga_entries, uint16_t& mgc_entries,uint16_t& mgd_entries, uint16_t& mgb_entries,uint8_t & metric_group_active);
         
         /**Read current bytes written for each metric group
          * 
          *@return mg_bytes for each mgroup
          */
-        int read_mg_bytes(int& mga_bytes, int& mgb_bytes, int& mgc_bytes,int& mgd_bytes); 
+        int read_mg_bytes(int& mga_bytes, int& mgb_bytes, int& mgc_bytes, int& mgd_bytes); 
 
-        /**Clear all entries 
-         */
-        int clear_mg_counter();
-
-        /**Clears the increment/s.
-         */
-        int _clear_increment();
-
-        /**Clears the increment/s && the eeprom after sending
-         */
-        int _clear_after_send();
-
+        /** INTERRUPT**************************************************************************************************/
         /** Handle Interrupt 
          */
-        int delay_pin_wakeup();
+        int is_delay_pin_wakeup_flag();
 
         /** Re-measures the sleeping time after an interrupt 
          */
@@ -778,6 +763,20 @@ class NodeFlow: public DataManager
          */
         int overwrite_wakeup_timestamp(uint16_t time_remainder);
 
+        /** CLEARS**************************************************************************************************/
+        /**Clear the counter entries
+         */
+        int clear_mg_counter();
+
+        /**Clears the increment/s.
+         */
+        int clear_increment();
+
+        /**Clears the increment/s && the eeprom after sending
+         */
+        int clear_after_send();
+
+        /** SLEEP MANAGER*********************************************************************************************/
         /** Manage device sleep times before calling sleep_manager.standby().
          *  Ensure that the maximum time the device can sleep for is 6600 seconds,
          *  this is due to the watchdog timer timeout, set at 7200 seconds
@@ -797,11 +796,11 @@ class NodeFlow: public DataManager
          */
         TP_Sleep_Manager sleep_manager;
 
-        /** Instance of TFormatter to handle serialisation of the data 
+        /** TFORMATTER************************************************************************************************/
+        /** Instance of TFormatter to handle serialisation of the data. Currently supports CBOR
          */
         TFormatter tformatter;
        
-
         /** LORAWAN **************************************************************************************************/
         #if BOARD == EARHART_V1_0_0
 
@@ -839,7 +838,7 @@ class NodeFlow: public DataManager
          *                      LORAWAN_STATUS_PORT_INVALID      if trying to send to an invalid port (e.g. to 0)
          *                      LORAWAN_STATUS_PARAMETER_INVALID if NULL data pointer is given or flags are invalid
          */
-        int receiveTTN(uint32_t* rx_message=NULL, uint8_t* rx_port=NULL);
+        int receiveTTN(uint32_t& rx_message, uint8_t& rx_port);
 
         #endif /* #if BOARD == EARHART_V1_0_0 */
         /** LORAWAN END **********************************************************************************************/
@@ -870,22 +869,34 @@ class NodeFlow: public DataManager
             Comms_Radio_Stack _comms_stack = Comms_Radio_Stack::UNDEFINED;
         #endif /* #if BOARD == ... */
 
+        /**Handle the errors @todo: Critical errors that the device will need to reset if happens
+         * 
+         *@param line stores the line of the error in order to measure consecutive errors
+         */
         void ErrorHandler(int line, const char* str1, int status, const char* str2);
-        /**Read current error increment value.
+
+        /**Read current error increment value. @todo: Critical errors that the device will need to reset if happens
          * 
          *@param increment_value increment_value
          *@param increment_value increment_value
          */
-        void error_increment(int &errCnt, uint16_t line, bool &error); //, uint16_t line, bool error, uint16_t line, bool error// /**Critical errors that the device will need to reset if happens */
-    enum
-    {   
-        NODEFLOW_OK                 =  0,
-        DATA_MANAGER_FAIL           = -1,
-        LORAWAN_TP_FAILED           = -2,
-        NBIOT_TP_FAILED             = -3,
-        EEPROM_DRIVER_FAILED        = -4,
+        int error_increment(int &errCnt, uint16_t line, bool &error); 
+        
+        #if(SCHEDULER)
+            float* scheduler;
+        #endif
+        int status;
+        /**
+         */
+        enum
+        {   
+            NODEFLOW_OK                 =  0,
+            DATA_MANAGER_FAIL           = -1,
+            LORAWAN_TP_FAILED           = -2,
+            NBIOT_TP_FAILED             = -3,
+            EEPROM_DRIVER_FAILED        = -4,
 
-    };
+        };
 };
 
 
