@@ -382,6 +382,27 @@ class NodeFlow: public DataManager
             LORA      = 1,
             UNDEFINED = 10
         };
+
+        enum class Init_State
+        {
+            TEST = 1,
+            PROV = 2,
+            RUN  = 3
+        };
+
+        enum class Test_State
+        {
+            GPIO_TEST = 0,
+            WFC       = 1,
+            END       = 2
+        };
+
+        enum class Prov_State
+        {
+            PROVISION = 0,
+            WFC       = 1,
+            END       = 2
+        };
         
         /** CONSTRUCTORS *********************************************************************************************/
         #if BOARD == EARHART_V1_0_0
@@ -494,6 +515,16 @@ class NodeFlow: public DataManager
 
 
     private:
+
+        void _oob_enter_test();
+
+        void _oob_gpio_test_handler();
+
+        void _oob_enter_prov();
+
+        void _oob_end_handler();
+
+        void _run();
 
         /** Initialise files after reset, set flags
          * 

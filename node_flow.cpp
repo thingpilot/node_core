@@ -73,6 +73,34 @@ int NodeFlow::initialise_nbiot()
 }
 #endif /* #if BOARD == WRIGHT_V1_0_0 */
 
+
+void NodeFlow::_oob_enter_test()
+{
+    INIT_STATE = Init_State::TEST;
+}
+
+void NodeFlow::_oob_gpio_test_handler()
+{
+    TEST_STATE = Test_State::GPIO_TEST;
+}
+
+void NodeFlow::_oob_enter_prov()
+{
+    INIT_STATE = Init_State::PROV;
+}
+
+void NodeFlow::_oob_end_handler()
+{
+    TEST_STATE = Test_State::END;
+    PROV_STATE = Prov_State::END;
+}
+
+void NodeFlow::_run()
+{
+    INIT_STATE = Init_State::RUN;
+}
+
+
 /** Start the device. kick the watchdog, initialise files, 
  *  Find the Wakeup type. 
  */
@@ -140,11 +168,114 @@ void NodeFlow::start()
     {
         debug("\r\n                      __|__       \n               --@--@--(_)--@--@--\n-------------------THING PILOT--------------------\r\n");
         debug("\nDevice Unique ID: %08X %08X %08X \r", STM32_UID[0], STM32_UID[1], STM32_UID[2]);
+
         status=initialise();
         if (status != NODEFLOW_OK)
         { 
             NVIC_SystemReset(); 
         }
+
+        {
+            volatile Init_State INIT_STATE = Init_State::RUN;
+            volatile Test_State TEST_STATE = Test_State::WFC;
+            volatile Prov_State PROV_STATE = Prov_State::WFC;
+
+            wait_us(500000);
+
+            UARTSerial *_serial;
+            ATCmdParser *_parser;
+
+            _serial = new UARTSerial(TP_PC_TXU, TP_PC_RXU, 9600);
+            _parser = new ATCmdParser(_serial);
+            _parser->set_delimiter("\r\n");
+            _parser->set_timeout(1000);
+
+            _parser->oob("TEST", callback(this, &NodeFlow::_oob_enter_test));
+            _parser->oob("PROV", callback(this, &NodeFlow::_oob_enter_prov));
+            _parser->oob("AT+END", callback(this, &NodeFlow::_oob_end_handler));
+
+            _parser->send("AT+CTRL");
+            if(_parser->recv("OK"))
+            {
+                switch(INIT_STATE)
+                {
+                    case Init_State::TEST: 
+                    {
+                        _parser->oob("AT+GPIO", callback(this, &NodeFlow::_oob_gpio_test_handler));
+
+                        while(INIT_STATE == Init_State::TEST)
+                        {
+                            switch(TEST_STATE)
+                            {
+                                case Test_State::GPIO_TEST: 
+                                {
+                                    int pin, state = 0;
+                                    _parser->recv("=%i,%i", &pin, &state);
+
+                                    DigitalOut test_pin((PinName)pin, state);                    
+                                    _parser->send("GPIO: %i, %i", pin, state);
+                                    
+                                    if(_parser->recv("OK"))
+                                    {
+                                        TEST_STATE = Test_State::WFC;
+                                        break;
+                                    }
+
+                                    TEST_STATE = Test_State::WFC;
+                                    break;
+                                }
+                                case Test_State::WFC: 
+                                {
+                                    _parser->process_oob();
+                                    break;
+                                }
+                                case Test_State::END:
+                                {
+                                    _parser->send("OK");
+                                    _run();
+                                    break;
+                                }    
+                            }
+                        }
+
+                        break;
+                    }
+                    case Init_State::PROV:
+                    {
+                        while(INIT_STATE == Init_State::PROV)
+                        {
+                            switch(PROV_STATE)
+                            {
+                                case Prov_State::PROVISION: 
+                                {
+                                    _parser->process_oob();
+                                    break;
+                                }
+                                case Prov_State::WFC: 
+                                {
+                                    _parser->process_oob();
+                                    break;
+                                }
+                                case Prov_State::END: 
+                                {
+                                    _parser->send("OK");
+                                    _run();
+                                    break;
+                                }
+                            }
+                        }
+
+                        break;
+                    }
+                }
+            }
+
+            delete _parser;
+            delete _serial;
+
+            debug("Test over yo!\r\n");
+        }
+
         #if BOARD == WRIGHT_V1_0_0
             initialise_nbiot();
         #endif
