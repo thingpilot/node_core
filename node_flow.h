@@ -399,6 +399,10 @@ class NodeFlow: public DataManager
             WFC       = 1,
             END       = 2
         };
+
+        volatile Init_State INIT_STATE = Init_State::RUN;
+        volatile Test_State TEST_STATE = Test_State::WFC;
+        volatile Prov_State PROV_STATE = Prov_State::WFC;
         
         /** CONSTRUCTORS *********************************************************************************************/
         #if BOARD == EARHART_V1_0_0
