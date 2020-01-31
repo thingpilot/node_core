@@ -271,6 +271,7 @@ void NodeFlow::start()
         #if BOARD == WRIGHT_V1_0_0
             initialise_nbiot();
         #endif /* #if BOARD == WRIGHT_V1_0_0 */
+        
         /**Pure virtual by the user 
          */
         setup(); 
