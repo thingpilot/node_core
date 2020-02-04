@@ -163,7 +163,7 @@ void NodeFlow::start()
     else if(wkp==TP_Sleep_Manager::WakeupType_t::WAKEUP_RESET || wkp==TP_Sleep_Manager::WakeupType_t::WAKEUP_SOFTWARE) 
     {
         debug("\r\n                      __|__       \n               --+--+--(_)--+--+--\n-------------------THING PILOT--------------------\r\n");
-        debug("\nDevice Unique ID: %08X %08X %08X \r", STM32_UID[0], STM32_UID[1], STM32_UID[2]);
+        debug("\nDevice Unique ID: %08X %08X %08X \r\n", STM32_UID[0], STM32_UID[1], STM32_UID[2]);
 
         status=initialise();
         if (status != NODEFLOW_OK)
@@ -171,14 +171,12 @@ void NodeFlow::start()
             NVIC_SystemReset(); 
         }
 
-        {
-            wait_us(500000);
+        wait_us(300000);
 
-            UARTSerial *_serial;
+        {
             ATCmdParser *_parser;
 
-            _serial = new UARTSerial(TP_PC_TXU, TP_PC_RXU, 9600);
-            _parser = new ATCmdParser(_serial);
+            _parser = new ATCmdParser(mbed_file_handle(STDOUT_FILENO));
             _parser->set_delimiter("\r\n");
             _parser->set_timeout(1000);
 
@@ -263,9 +261,6 @@ void NodeFlow::start()
             }
 
             delete _parser;
-            delete _serial;
-
-            debug("Test over yo!\r\n");
         }
 
         #if BOARD == WRIGHT_V1_0_0
