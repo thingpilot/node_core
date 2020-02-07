@@ -19,14 +19,7 @@
 #include "tformatter.h"
 #include <cmath>
 #include <bitset>
-
-// #include "platform/mbed_assert.h"
-// #include "platform/mbed_debug.h"
-// #include "platform/mbed_error.h"
-// #include "platform/mbed_stats.h"
-
-
-extern Serial pc;
+#include "mbed_mem_trace.h"
 
 #define NODEFLOW_DBG true
 
@@ -54,10 +47,17 @@ extern Serial pc;
 #define MAX_SEND_RETRIES 3
 #define MAX_OVERWRITE_RETRIES 3
 
-/**
- */
+#if (!SCHEDULER_B)
+    #define SCHEDULER_B_SIZE 0
+#endif
+#if (!SCHEDULER_C)
+    #define SCHEDULER_C_SIZE 0
+#endif
+#if (!SCHEDULER_D)
+    #define SCHEDULER_D_SIZE 0
+#endif
 #if (SCHEDULER)
-    #define SCHEDULER_SIZE (SCHEDULER_A_SIZE + SCHEDULER_B_SIZE + SCHEDULER_C_SIZE + SCHEDULER_D_SIZE)
+    #define SCHEDULER_SIZE (SCHEDULER_A_SIZE + SCHEDULER_B_SIZE +  SCHEDULER_C_SIZE + SCHEDULER_D_SIZE)
     extern float scheduler[]; 
     extern float schedulerA[];
     extern float schedulerB[];
@@ -96,13 +96,13 @@ union DeviceConfig
     } parameters;    char data[sizeof(DeviceConfig::parameters)];
 };
 
-
+/** */
 union MetricGroupAConfig
 {
     struct 
     {
         uint16_t byte;
-
+        
     } parameters;
 
     char data[sizeof(MetricGroupAConfig::parameters)];
@@ -113,7 +113,6 @@ union MetricGroupAConfig
         struct 
         {
             uint16_t byte;
-
         } parameters;
 
         char data[sizeof(MetricGroupBConfig::parameters)];
@@ -125,7 +124,6 @@ union MetricGroupAConfig
         struct 
         {
             uint16_t byte;
-
         } parameters;
 
         char data[sizeof(MetricGroupCConfig::parameters)];
@@ -137,12 +135,21 @@ union MetricGroupAConfig
         struct 
         {
             uint16_t byte;
-
         } parameters;
 
         char data[sizeof(MetricGroupDConfig::parameters)];
     };
 #endif
+
+union InterruptConfig
+{
+    struct 
+    {
+        uint16_t byte;
+    } parameters;
+
+    char data[sizeof(InterruptConfig::parameters)];
+};
 
 union MetricGroupEntriesConfig
 {
@@ -152,6 +159,7 @@ union MetricGroupEntriesConfig
         uint8_t MetricGroupBEntries;
         uint8_t MetricGroupCEntries;
         uint8_t MetricGroupDEntries;
+        uint16_t InterruptEntries;
 
     } parameters;
 
@@ -165,8 +173,7 @@ union SchedulerConfig
     struct 
     {   
         uint16_t time_comparator; 
-        uint8_t group_id;
-        
+        uint8_t group_id;    
     } parameters;
 
     char data[sizeof(SchedulerConfig::parameters)];
@@ -178,7 +185,6 @@ union MultiSchedulerConfig
     {   
         uint16_t time_comparator; 
         uint8_t group_id;
-        
     } parameters;
 
     char data[sizeof(MultiSchedulerConfig::parameters)];
@@ -191,8 +197,7 @@ union SendSchedulerConfig
 {
     struct 
     {   
-        uint16_t time_comparator; 
-        
+        uint16_t time_comparator;
     } parameters;
 
     char data[sizeof(SendSchedulerConfig::parameters)];
@@ -258,33 +263,32 @@ union IncrementCConfig
 {
     struct 
     {    
-        uint32_t  increment; 
+        uint64_t  increment; 
     } parameters;
 
     char data[sizeof(IncrementCConfig::parameters)];
 };
 
-/** Sensor Config,TempSensingGroupConfig, Time Config be used in later version 
- *  if the user wants to "register" each sensor for different reading times 
+/** MetricGroupTimes Config for storing the values of ,MetricGroupTimes Config, Time Config
  */
-union SensingGroupConfig
+union MetricGroupTimesConfig
 {
     struct 
     {   
-        uint16_t time_comparator; 
+        uint32_t time_comparator; 
     } parameters;
 
-    char data[sizeof(SensingGroupConfig::parameters)];
+    char data[sizeof(MetricGroupTimesConfig::parameters)];
 };
 
-union TempSensingGroupConfig
+union TempMetricGroupTimesConfig
 {
     struct 
     {  
-        uint16_t time_comparator; 
+        uint32_t time_comparator; 
     } parameters;
 
-    char data[sizeof(TempSensingGroupConfig::parameters)];
+    char data[sizeof(TempMetricGroupTimesConfig::parameters)];
 };
 
 /**TODO: Merge with ssck_flags group,Flags for each group */
@@ -327,24 +331,25 @@ union ErrorConfig
  */
 enum Filenames
 {
-    ErrorConfig_n               = 0, /**Holds an increment of concecutives errors */
-    MetricGroupAConfig_n        = 1, 
-    SchedulerConfig_n           = 2,
-    ClockSynchConfig_n          = 3,
-    FlagsConfig_n               = 4, 
-    IncrementAConfig_n          = 5,
-    SensingGroupConfig_n        = 6, 
-    TimeConfig_n                = 7,
-    TempSensingGroupConfig_n    = 8,
-    NextTimeConfig_n            = 9,
-    SendSchedulerConfig_n       = 10,
-    MetricGroupConfig_n         = 11,
-    IncrementBConfig_n          = 12,
-    IncrementCConfig_n          = 13,
-    MetricGroupBConfig_n        = 14,
-    MetricGroupCConfig_n        = 15,
-    MetricGroupDConfig_n        = 16,
-    MetricGroupEntriesConfig_n  = 17
+    ErrorConfig_n                   = 0, /**Holds an increment of concecutives errors */
+    MetricGroupAConfig_n            = 1, 
+    SchedulerConfig_n               = 2,
+    ClockSynchConfig_n              = 3,
+    FlagsConfig_n                   = 4, 
+    IncrementAConfig_n              = 5,
+    MetricGroupTimesConfig_n        = 6, 
+    TimeConfig_n                    = 7,
+    TempMetricGroupTimesConfig_n    = 8,
+    NextTimeConfig_n                = 9,
+    SendSchedulerConfig_n           = 10,
+    MetricGroupConfig_n             = 11,
+    IncrementBConfig_n              = 12,
+    IncrementCConfig_n              = 13,
+    MetricGroupBConfig_n            = 14,
+    MetricGroupCConfig_n            = 15,
+    MetricGroupDConfig_n            = 16,
+    MetricGroupEntriesConfig_n      = 17,
+    InterruptConfig_n               = 18
     
  };
 
@@ -473,6 +478,12 @@ class NodeFlow: public DataManager
          *@param increment_value increment_value
          */
         int read_inc_b(uint16_t& increment_value);
+
+        /**Clears the increment value.
+         * 
+         *@param increment_value increment_value
+         */
+        int clear_inc_b();
         /**Increment with a value.
          * 
          *@param i increment value
@@ -483,7 +494,7 @@ class NodeFlow: public DataManager
          * 
          *@param increment_value increment_value
          */
-        int read_inc_c(uint32_t& increment_value);
+        int read_inc_c(uint64_t& increment_value);
         
         // int counter(uint8_t& entries_counter); //todo remove?
         // int read_counter(uint8_t &entries_counter);
@@ -549,13 +560,13 @@ class NodeFlow: public DataManager
          * @return          It could be one of these:
          *                  
          */ 
-        int sensor_config_init(int length);
+        int metric_config_init(int length);
         /** Adds the metric groups for interval sensing times, handles each group differently
          *                 
          * @return          It could be one of these:
          *                  
          */    
-        int add_sensing_groups(); 
+        void add_metric_groups(); 
 
         /** Sets the next reading time for interval periodic sensing, handles each group differently
          *                 
@@ -563,7 +574,7 @@ class NodeFlow: public DataManager
          * @return          It could be one of these:
          *                  
          */        
-        int set_reading_time(uint32_t* time=NULL); 
+        int set_reading_time(uint32_t& time); 
 
         /** Fixes the next reading times after interrupt/clock etc interrupt for each group differently
          *                 
@@ -571,7 +582,7 @@ class NodeFlow: public DataManager
          * @return          It could be one of these:
          *                  
          */
-         int set_temp_reading_times(uint16_t time);
+         int set_temp_reading_times(uint32_t time);
         
         /** Specific times for each sensing of metric groups *******************************************************
          */
@@ -588,7 +599,7 @@ class NodeFlow: public DataManager
          * @return          It could be one of these:
          *                                       
          */     
-        int set_scheduler(uint32_t* next_timediff);
+        void set_scheduler(int latency, uint32_t& next_timediff);
 
         /** Scheduler holds the length and group id for each specific times 
          *                  
@@ -596,9 +607,9 @@ class NodeFlow: public DataManager
          * @return          It could be one of these:
          *                                       
          */ 
-        int read_sched_config(int i,uint16_t* time_comparator);
+        int read_sched_config(int i,uint16_t& time_comparator);
 
-        int read_sched_group_id(int i,uint8_t* time_comparator);
+        int read_sched_group_id(int i,uint8_t& time_comparator);
         /** Overwrite the Scheduler holds the length and group id for each specific time. 
          *                                      
          */ 
@@ -620,7 +631,7 @@ class NodeFlow: public DataManager
          * @return          It could be one of these:
          *                                       
          */ 
-        int read_send_sched_config(int i, uint16_t* time);
+        int read_send_sched_config(int i, uint16_t& time);
         /** Overwrite the send scheduler. 
          *                                      
          */
@@ -645,7 +656,7 @@ class NodeFlow: public DataManager
          * @return              It could be one of these:
          *                                       
          */
-        int read_clock_synch_config(uint16_t* time,bool &clockSynchOn);
+        int read_clock_synch_config(uint16_t& time,bool &clockSynchOn);
 
         /** Get wakeup flag.
          *
@@ -715,21 +726,16 @@ class NodeFlow: public DataManager
          */
         int get_metric_flags(uint8_t &flag);
 
-        /** Handle Modem. Handles communication with the server in case of sense or send flag.
-         */
-        int HandleModem();
-
         int cbor_object_string(const string& object_str, const string& input_str);
         int add_cbor_payload_data(uint8_t metric_group_flag);
-        int wrapped_cbor_general_data();
-        //template <typename DataType>
-        //int decimal_to_hex(DataType data, uint8_t* bytes);
-        //TODO: MOVE THIS
+        
+        void _sense();
+        void _send(bool interrupt_send);
         /**Adds a bytes of sensing entries added as record by the user.
          */
         int add_sensing_entry(uint8_t value, uint8_t metric_group);
 
-        void is_overflow(uint8_t &wakeup_flag);
+        bool is_overflow();
 
         /**Counter for each metric group entry
          * 
@@ -747,12 +753,16 @@ class NodeFlow: public DataManager
          * 
          *@return mg_bytes for each mgroup
          */
-        int read_mg_bytes(int& mga_bytes, int& mgb_bytes, int& mgc_bytes, int& mgd_bytes); 
+        int read_mg_bytes(int& mga_bytes, int& mgb_bytes, int& mgc_bytes, int& mgd_byte, int& interrupt_bytes); 
 
         /** INTERRUPT**************************************************************************************************/
         /** Handle Interrupt 
          */
+        int read_interrupt_counter(uint16_t& interrupt_entries);
+
         int is_delay_pin_wakeup_flag();
+
+        int correct_latency(int latency);
 
         /** Re-measures the sleeping time after an interrupt 
          */
@@ -881,10 +891,16 @@ class NodeFlow: public DataManager
          *@param increment_value increment_value
          */
         int error_increment(int &errCnt, uint16_t line, bool &error); 
+
+        /** Eeprom details
+         */
+        void eeprom_debug();
+        void tracking_memory();
         
         #if(SCHEDULER)
             float* scheduler;
         #endif
+        uint8_t* buffer;
         int status;
         /**
          */
