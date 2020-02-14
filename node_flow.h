@@ -19,6 +19,7 @@
 #include "tformatter.h"
 #include <cmath>
 #include <bitset>
+#include <algorithm>    
 #include "mbed_mem_trace.h"
 
 #define NODEFLOW_DBG true
@@ -73,6 +74,8 @@
 #if(SEND_SCHEDULER)
      extern float send_scheduler[];
 #endif
+
+
 
 #define MAX_BUFFER_SENDING_TIMES 10
 
@@ -465,7 +468,7 @@ class NodeFlow: public DataManager
          * 
          *@param increment_value increment_value
          */
-        int read_inc_a(uint16_t& increment_value);
+        uint16_t read_inc_a();
 
         /**Increment with a value.
          * 
@@ -499,6 +502,7 @@ class NodeFlow: public DataManager
         // int counter(uint8_t& entries_counter); //todo remove?
         // int read_counter(uint8_t &entries_counter);
 
+       // int create_file(DataManager_FileSystem::File_t f, int length);
 
     private:
 
@@ -727,7 +731,7 @@ class NodeFlow: public DataManager
         int get_metric_flags(uint8_t &flag);
 
         int cbor_object_string(const string& object_str, const string& input_str);
-        int add_cbor_payload_data(uint8_t metric_group_flag);
+        int add_payload_data(uint8_t metric_group_flag);
         
         void _sense();
         void _send(bool interrupt_send);
