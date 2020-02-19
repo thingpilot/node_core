@@ -867,7 +867,6 @@ class NodeFlow: public DataManager
         /**Read current error increment value. @todo: Critical errors that the device will need to reset if happens
          * 
          *@param increment_value increment_value
-         *@param increment_value increment_value
          */
         int error_increment(int &errCnt, uint16_t line, bool &error); 
 
