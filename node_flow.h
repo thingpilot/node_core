@@ -37,6 +37,7 @@
 #define size(x)  (sizeof(x) / sizeof((x)[0]))
 #define DIVIDE(x) (x)/2
 
+#define FILENAME_START 18
 /** Time related defines 
  */
 #define DAYINSEC    86400
@@ -86,6 +87,7 @@
  * @param SchedulerConfig. Holds the scheduled times by the user.
  * @param SensingGroupConfig. Each sensor is registered in the Sensor config file.
  */
+
 union DeviceConfig
 {
     struct 
@@ -96,11 +98,12 @@ union DeviceConfig
         uint8_t DEVEUI[8];
         uint8_t APPKEY[16];
         
-    } parameters;    char data[sizeof(DeviceConfig::parameters)];
+    } parameters;    
+    char data[sizeof(DeviceConfig::parameters)];
 };
 
 /** */
-union MetricGroupAConfig
+union DataConfig
 {
     struct 
     {
@@ -108,51 +111,9 @@ union MetricGroupAConfig
         
     } parameters;
 
-    char data[sizeof(MetricGroupAConfig::parameters)];
+    char data[sizeof(DataConfig::parameters)];
 };
-#if (SCHEDULER_B || METRIC_GROUPS_ON==4 ||METRIC_GROUPS_ON==3 || METRIC_GROUPS_ON==2)
-    union MetricGroupBConfig
-    {
-        struct 
-        {
-            uint16_t byte;
-        } parameters;
 
-        char data[sizeof(MetricGroupBConfig::parameters)];
-    };
-#endif
-#if (SCHEDULER_C || METRIC_GROUPS_ON==4 || METRIC_GROUPS_ON==3)
-    union MetricGroupCConfig
-    {
-        struct 
-        {
-            uint16_t byte;
-        } parameters;
-
-        char data[sizeof(MetricGroupCConfig::parameters)];
-    };
-#endif
-#if (SCHEDULER_D || METRIC_GROUPS_ON==4)
-    union MetricGroupDConfig
-    {
-        struct 
-        {
-            uint16_t byte;
-        } parameters;
-
-        char data[sizeof(MetricGroupDConfig::parameters)];
-    };
-#endif
-
-union InterruptConfig
-{
-    struct 
-    {
-        uint16_t byte;
-    } parameters;
-
-    char data[sizeof(InterruptConfig::parameters)];
-};
 
 union MetricGroupEntriesConfig
 {
@@ -163,7 +124,6 @@ union MetricGroupEntriesConfig
         uint8_t MetricGroupCEntries;
         uint8_t MetricGroupDEntries;
         uint16_t InterruptEntries;
-
     } parameters;
 
     char data[sizeof(MetricGroupEntriesConfig::parameters)];
@@ -182,17 +142,6 @@ union SchedulerConfig
     char data[sizeof(SchedulerConfig::parameters)];
 };
 
-union MultiSchedulerConfig
-{
-    struct 
-    {   
-        uint16_t time_comparator; 
-        uint8_t group_id;
-    } parameters;
-
-    char data[sizeof(MultiSchedulerConfig::parameters)];
-
-};
 
 /** The User can define MAX_BUFFER_READING_TIMES 
  */
@@ -284,15 +233,6 @@ union MetricGroupTimesConfig
     char data[sizeof(MetricGroupTimesConfig::parameters)];
 };
 
-union TempMetricGroupTimesConfig
-{
-    struct 
-    {  
-        uint32_t time_comparator; 
-    } parameters;
-
-    char data[sizeof(TempMetricGroupTimesConfig::parameters)];
-};
 
 /**TODO: Merge with ssck_flags group,Flags for each group */
 union MetricGroupConfig
@@ -499,11 +439,11 @@ class NodeFlow: public DataManager
          */
         int read_inc_c(uint64_t& increment_value);
         
-        // int counter(uint8_t& entries_counter); //todo remove?
-        // int read_counter(uint8_t &entries_counter);
+        //get filename from the 
+        int create_file(uint8_t filename, int length);
 
-       // int create_file(DataManager_FileSystem::File_t f, int length);
-
+        //todo: move this
+        void read_write_entry(uint8_t group_tag, int len, uint8_t filename);
     private:
 
         /** Initialise files after reset, set flags
@@ -906,6 +846,7 @@ class NodeFlow: public DataManager
         #endif
         uint8_t* buffer;
         int status;
+        // int filenames_len=Filenames::length;
         /**
          */
         enum
