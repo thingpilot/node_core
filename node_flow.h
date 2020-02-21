@@ -155,7 +155,7 @@ union SendSchedulerConfig
     char data[sizeof(SendSchedulerConfig::parameters)];
 };
 
-union ClockSynchConfig
+union ClockSynchFlag
 {
     struct 
     {  
@@ -164,7 +164,7 @@ union ClockSynchConfig
         
     } parameters;
 
-    char data[sizeof(ClockSynchConfig::parameters)];
+    char data[sizeof(ClockSynchFlag::parameters)];
 };
 
 /** Program specific flags. Every bit is a different flag. 0:SENSE, 1:SEND, 2:CLOCK, 3:KICK
@@ -173,8 +173,8 @@ union FlagsConfig
 {
     struct 
     {    
-        uint8_t ssck_flag;
-        bool  pin_wakeup;
+        uint8_t value;
+        bool  flag;
          
     } parameters;
 
@@ -277,8 +277,8 @@ enum Filenames
     ErrorConfig_n                   = 0, /**Holds an increment of concecutives errors */
     MetricGroupAConfig_n            = 1, 
     SchedulerConfig_n               = 2,
-    ClockSynchConfig_n              = 3,
-    FlagsConfig_n                   = 4, 
+    ClockSynchFlag_n                = 3,
+    FlagSSCKConfig_n                = 4, 
     IncrementAConfig_n              = 5,
     MetricGroupTimesConfig_n        = 6, 
     TimeConfig_n                    = 7,
@@ -292,7 +292,9 @@ enum Filenames
     MetricGroupCConfig_n            = 15,
     MetricGroupDConfig_n            = 16,
     MetricGroupEntriesConfig_n      = 17,
-    InterruptConfig_n               = 18
+    InterruptConfig_n               = 18,
+    MemoryFlagConfig_n              = 19
+
     
  };
 
