@@ -63,7 +63,7 @@ int NodeFlow::initialise_nbiot()
             if(status != NodeFlow::NODEFLOW_OK)
             {
                 debug("\nRadio not initialised %d\r\n",status);
-                return status;
+                //return status;
             }
         }
         char ipv4[] = "68.183.254.233";
@@ -74,6 +74,7 @@ int NodeFlow::initialise_nbiot()
         if(status != NodeFlow::NODEFLOW_OK)
         {
             debug("\nCoap server not configured %d\r\n",status);
+            return status;
         }
     }
     return status;      
@@ -174,9 +175,6 @@ void NodeFlow::start()
             if(wakeup_flag==NodeFlow::FLAG_SENDING || wakeup_flag==NodeFlow::FLAG_SENSE_SEND ||
                 wakeup_flag==NodeFlow::FLAG_SEND_SYNCH || wakeup_flag==NodeFlow::FLAG_SENSE_SEND_SYNCH)
             { 
-                #if BOARD == WRIGHT_V1_0_0
-                    initialise_nbiot();
-                #endif /* #if BOARD == WRIGHT_V1_0_0 */
                 _send(false);
             }
 
@@ -2146,20 +2144,19 @@ void NodeFlow::_send(bool interrupt_send)
         char recv_data[512];
         
         status=_radio.coap_post(buffer, buffer_len, recv_data, SaraN2::TEXT_PLAIN, response_code); 
-        if(response_code != 0 || response_code != 2 ) 
+        if(response_code == 0 || response_code == 2 ) 
         {
-            debug("\r\nError sending. Response_code %d",response_code);
-            // _radio.coap_post(buffer, buffer_len, recv_data, SaraN2::TEXT_PLAIN, response_code);
-            // ThisThread::sleep_for(5000);
-            //TODO: HANDLE NOT SENDING retry?!
-        } 
-        //todo: if it doesn't send
-        // else
-        // {
+            debug("\r\nSuccess. Response_code %d",response_code);
             clear_after_send();
-        // }
-          delete [] buffer;
-        
+        } 
+
+        else
+        {
+            debug("\r\nError sending. Response_code %d, status %d",response_code,status);
+            //todo:flag not_sended enabled
+           // clear_after_send();
+        }
+        delete [] buffer;
     #endif /* BOARD == WRIGHT_V1_0_0 */
 
     #if BOARD == EARHART_V1_0_0
