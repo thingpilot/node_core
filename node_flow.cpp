@@ -57,25 +57,29 @@ int NodeFlow::initialise_nbiot()
     if(_comms_stack == Comms_Radio_Stack::NBIOT)
     {
         status=_radio.ready();
+        
         if(status == NodeFlow::NODEFLOW_OK)
         {
-            status = _radio.start();
+            char ipv4[] = "68.183.254.233";
+            uint16_t port= 5683;
+            char uri[] = "coap://68.183.254.233:5683/";
+            uint8_t uri_length=27;
+            status=_radio.configure_coap(ipv4, port, uri, uri_length);
+            if(status != NodeFlow::NODEFLOW_OK)
+            {
+                debug("\nCoap server not configured %d\r\n",status);
+                return status;
+            }
+
+            status = _radio.start(5);
             if(status != NodeFlow::NODEFLOW_OK)
             {
                 debug("\nRadio not initialised %d\r\n",status);
                 //return status;
             }
         }
-        char ipv4[] = "68.183.254.233";
-        uint16_t port= 5683;
-        char uri[] = "coap://68.183.254.233:5683/";
-        uint8_t uri_length=27;
-        status=_radio.configure_coap(ipv4, port, uri, uri_length);
-        if(status != NodeFlow::NODEFLOW_OK)
-        {
-            debug("\nCoap server not configured %d\r\n",status);
-            return status;
-        }
+       
+        
     }
     return status;      
 }
@@ -197,13 +201,13 @@ void NodeFlow::start()
     {
         debug("\r\n                      __|__\n               --+--+--(_)--+--+--\n-------------------THING PILOT--------------------\r\n");
         debug("\nDevice Unique ID: %08X %08X %08X \r", STM32_UID[0], STM32_UID[1], STM32_UID[2]);
-
+        wait_us(1000);
         status=initialise();
         if (status != NODEFLOW_OK)
         { 
             NVIC_SystemReset(); 
         }
-
+        
         wait_us(300000);
 
         {
@@ -420,13 +424,13 @@ int NodeFlow::initialise()
         return status;    
     }
     
-    /** ClockSynchConfig 
+    /** ClockSynchFlag 
      */
-    DataManager_FileSystem::File_t ClockSynchConfig_File_t;
-    ClockSynchConfig_File_t.parameters.filename = ClockSynchConfig_n;
-    ClockSynchConfig_File_t.parameters.length_bytes = sizeof( ClockSynchConfig::parameters);
+    DataManager_FileSystem::File_t ClockSynchFlag_File_t;
+    ClockSynchFlag_File_t.parameters.filename = ClockSynchFlag_n;
+    ClockSynchFlag_File_t.parameters.length_bytes = sizeof( ClockSynchFlag::parameters);
 
-    status=DataManager::add_file(ClockSynchConfig_File_t, 1); 
+    status=DataManager::add_file(ClockSynchFlag_File_t, 1); 
     if(status != NODEFLOW_OK)
     {
         return status;   
@@ -441,20 +445,32 @@ int NodeFlow::initialise()
     {
         return status;
     }   
-    /** FlagsConfig. Every bit is a different flag. 
+    /** FlagSSCKConfig. Every bit is a different flag. 
      *  0:SENSE, 1:SEND, 2:CLOCK, 3:KICK && true or false for pin_wakeup
      */
-    DataManager_FileSystem::File_t FlagsConfig_File_t;
-    FlagsConfig_File_t.parameters.filename = FlagsConfig_n;
-    FlagsConfig_File_t.parameters.length_bytes = sizeof(FlagsConfig::parameters);
+    DataManager_FileSystem::File_t FlagSSCKConfig_File_t;
+    FlagSSCKConfig_File_t.parameters.filename = FlagSSCKConfig_n;
+    FlagSSCKConfig_File_t.parameters.length_bytes = sizeof(FlagsConfig::parameters);
 
-    status=DataManager::add_file(FlagsConfig_File_t, 1);
+    status=DataManager::add_file(FlagSSCKConfig_File_t, 1);
     if(status != NODEFLOW_OK)
     {
         return status;   
     }
     status=set_flags_config(0);  
 
+    /** MemoryFlagConfig. Memory full notation
+     */
+    DataManager_FileSystem::File_t MemoryFlagConfig_File_t;
+    MemoryFlagConfig_File_t.parameters.filename = MemoryFlagConfig_n;
+    MemoryFlagConfig_File_t.parameters.length_bytes = sizeof(FlagsConfig::parameters);
+
+    status=DataManager::add_file(MemoryFlagConfig_File_t, 1);
+    if(status != NODEFLOW_OK)
+    {
+        return status;   
+    }
+      
     /** IncrementAConfig
      */
     DataManager_FileSystem::File_t IncrementAConfig_File_t;
@@ -1427,16 +1443,16 @@ int NodeFlow::read_send_sched_config(int i, uint16_t& time)
 //change so the user will choose
 int NodeFlow::overwrite_clock_synch_config(int time_comparator, bool clockSynchOn)
 {
-    ClockSynchConfig c_conf;
+    ClockSynchFlag c_conf;
     c_conf.parameters.clockSynchOn=clockSynchOn;
     c_conf.parameters.time_comparator=time_comparator;
     
-    status = DataManager::overwrite_file_entries(ClockSynchConfig_n, c_conf.data, sizeof(c_conf.parameters));
+    status = DataManager::overwrite_file_entries(ClockSynchFlag_n, c_conf.data, sizeof(c_conf.parameters));
     int count=0;
     while(status != NODEFLOW_OK && count<MAX_OVERWRITE_RETRIES) 
     {
-        ErrorHandler(__LINE__,"ClockSynchConfig",status,__PRETTY_FUNCTION__);
-        status = DataManager::overwrite_file_entries(ClockSynchConfig_n, c_conf.data, sizeof(c_conf.parameters));
+        ErrorHandler(__LINE__,"ClockSynchFlag",status,__PRETTY_FUNCTION__);
+        status = DataManager::overwrite_file_entries(ClockSynchFlag_n, c_conf.data, sizeof(c_conf.parameters));
         ++count;
     } 
 
@@ -1445,8 +1461,8 @@ int NodeFlow::overwrite_clock_synch_config(int time_comparator, bool clockSynchO
 
 int NodeFlow::read_clock_synch_config(uint16_t& time, bool &clockSynchOn)
 {
-    ClockSynchConfig c_conf;
-    status = DataManager::read_file_entry(ClockSynchConfig_n, 0, c_conf.data, sizeof(c_conf.parameters));
+    ClockSynchFlag c_conf;
+    status = DataManager::read_file_entry(ClockSynchFlag_n, 0, c_conf.data, sizeof(c_conf.parameters));
     if (status != NODEFLOW_OK)
     {
          ErrorHandler(__LINE__,"ClockSyncConfig",status,__PRETTY_FUNCTION__);
@@ -1486,16 +1502,18 @@ int NodeFlow::read_sched_group_id(int i, uint8_t& group_id)
 }
 
 /**Sets the flags, for just kicking the watchdog, sensing time,clock synch time, or sending time(NOT YET) */
+/** Program specific flags. Every bit is a different flag. 0:SENSE, 1:SEND, 2:CLOCK, 3:KICK
+ */
 int NodeFlow:: set_flags_config(uint8_t ssck_flag)
 {
     FlagsConfig f_conf;
-    f_conf.parameters.ssck_flag=ssck_flag;
-    f_conf.parameters.pin_wakeup=0;
+    f_conf.parameters.value=ssck_flag;
+    f_conf.parameters.flag=0;
 
-    status= DataManager::overwrite_file_entries(FlagsConfig_n, f_conf.data, sizeof(f_conf.parameters));
+    status= DataManager::overwrite_file_entries(FlagSSCKConfig_n, f_conf.data, sizeof(f_conf.parameters));
     if(status != NODEFLOW_OK)
     {
-        ErrorHandler(__LINE__,"FlagsConfig",status,__PRETTY_FUNCTION__); 
+        ErrorHandler(__LINE__,"FlagSSCKConfig",status,__PRETTY_FUNCTION__); 
     }
 
     return status;
@@ -1504,14 +1522,14 @@ int NodeFlow:: set_flags_config(uint8_t ssck_flag)
 int NodeFlow::set_wakeup_pin_flag(bool wakeup_pin)
 {
     FlagsConfig f_conf;
-    status=DataManager::read_file_entry(FlagsConfig_n, 0, f_conf.data,sizeof(f_conf.parameters));
+    status=DataManager::read_file_entry(FlagSSCKConfig_n, 0, f_conf.data,sizeof(f_conf.parameters));
 
-    f_conf.parameters.pin_wakeup=wakeup_pin;
-    status= DataManager::overwrite_file_entries(FlagsConfig_n, f_conf.data, sizeof(f_conf.parameters));
+    f_conf.parameters.flag=wakeup_pin;
+    status= DataManager::overwrite_file_entries(FlagSSCKConfig_n, f_conf.data, sizeof(f_conf.parameters));
 
     if(status != NODEFLOW_OK)
     {
-        ErrorHandler(__LINE__,"FlagsConfig",status,__PRETTY_FUNCTION__);  
+        ErrorHandler(__LINE__,"FlagSSCKConfig",status,__PRETTY_FUNCTION__);  
     }
     return status;
 }
@@ -2072,8 +2090,6 @@ void NodeFlow::read_write_entry(uint8_t group_tag, int len, uint8_t filename)
 
 void NodeFlow::_send(bool interrupt_send)
 {
-    debug("\r\nBefore send");
-    tracking_memory();
     uint16_t mga_entries, mgb_entries, mgc_entries, mgd_entries, interrupt_entries;
     int mga_bytes, mgb_bytes, mgc_bytes, mgd_bytes, interrupt_bytes;
     uint8_t metric_group_active=0;
@@ -2152,6 +2168,7 @@ void NodeFlow::_send(bool interrupt_send)
 
         else
         {
+            clear_after_send(); //todo remove
             debug("\r\nError sending. Response_code %d, status %d",response_code,status);
             //todo:flag not_sended enabled
            // clear_after_send();
@@ -2303,14 +2320,14 @@ int NodeFlow::receiveTTN(uint32_t& rx_message, uint8_t& rx_port)
 int NodeFlow::get_wakeup_flags()
 {    
     FlagsConfig f_conf;
-    status=DataManager::read_file_entry(FlagsConfig_n, 0, f_conf.data,sizeof(f_conf.parameters));
+    status=DataManager::read_file_entry(FlagSSCKConfig_n, 0, f_conf.data,sizeof(f_conf.parameters));
     if(status != NODEFLOW_OK)
     {
-        ErrorHandler(__LINE__,"FlagsConfig",status,__PRETTY_FUNCTION__);
+        ErrorHandler(__LINE__,"FlagSSCKConfig",status,__PRETTY_FUNCTION__);
         return status;
     }
 
-    bitset<8> ssck_flag(f_conf.parameters.ssck_flag);
+    bitset<8> ssck_flag(f_conf.parameters.value);
     if(ssck_flag.test(0) && ssck_flag.test(1) && ssck_flag.test(2))
     {
         return NodeFlow::FLAG_SENSE_SEND_SYNCH;
@@ -2352,13 +2369,13 @@ int NodeFlow::get_wakeup_flags()
 int NodeFlow::is_delay_pin_wakeup_flag()
 {    
     FlagsConfig f_conf;
-    status=DataManager::read_file_entry(FlagsConfig_n, 0, f_conf.data,sizeof(f_conf.parameters));
+    status=DataManager::read_file_entry(FlagSSCKConfig_n, 0, f_conf.data,sizeof(f_conf.parameters));
     if (status != NODEFLOW_OK)
     {
-        ErrorHandler(__LINE__,"FlagsConfig",status,__PRETTY_FUNCTION__);
+        ErrorHandler(__LINE__,"FlagSSCKConfig",status,__PRETTY_FUNCTION__);
         return status;
     }
-     if (f_conf.parameters.pin_wakeup)
+     if (f_conf.parameters.flag)
      {
          return NodeFlow::FLAG_WAKEUP_PIN;
      }
