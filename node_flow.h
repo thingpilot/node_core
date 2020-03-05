@@ -37,7 +37,7 @@
 #define size(x)  (sizeof(x) / sizeof((x)[0]))
 #define DIVIDE(x) (x)/2
 
-#define FILENAME_START 18
+#define FILENAME_START 19 
 /** Time related defines 
  */
 #define DAYINSEC    86400
@@ -76,8 +76,6 @@
      extern float send_scheduler[];
 #endif
 
-
-
 #define MAX_BUFFER_SENDING_TIMES 10
 
 /** Eeprom configuration. 
@@ -87,20 +85,34 @@
  * @param SchedulerConfig. Holds the scheduled times by the user.
  * @param SensingGroupConfig. Each sensor is registered in the Sensor config file.
  */
-
-union DeviceConfig
-{
-    struct 
+#if(OVER_THE_AIR_ACTIVATION)
+    union DeviceConfig
     {
-        uint32_t device_sn; //Device unique id?! our unique id?
-        uint8_t modulation; //defined 0 or 1 for lora, nbiot respectively,
-        uint8_t APPEUI[8];
-        uint8_t DEVEUI[8];
-        uint8_t APPKEY[16];
-        
-    } parameters;    
-    char data[sizeof(DeviceConfig::parameters)];
-};
+        struct 
+        {
+            uint16_t otaa; //true (0)
+            uint8_t device_eui[8];
+            uint8_t application_eui[8];
+            uint8_t application_key[16];
+            uint16_t hey;
+        } parameters;    
+        char data[sizeof(DeviceConfig::parameters)];
+    };
+#endif
+
+#if(!OVER_THE_AIR_ACTIVATION)
+    union DeviceConfig
+    {
+        struct 
+        {
+            uint8_t otaa; //true (0)
+            uint32_t device_address;
+            uint8_t net_session_key[16];
+            uint8_t app_session_key[16];
+        } parameters;    
+        char data[sizeof(DeviceConfig::parameters)];
+    };
+#endif
 
 /** */
 union DataConfig
@@ -119,10 +131,10 @@ union MetricGroupEntriesConfig
 {
     struct 
     {
-        uint8_t MetricGroupAEntries;
-        uint8_t MetricGroupBEntries;
-        uint8_t MetricGroupCEntries;
-        uint8_t MetricGroupDEntries;
+        uint16_t MetricGroupAEntries;
+        uint16_t MetricGroupBEntries;
+        uint16_t MetricGroupCEntries;
+        uint16_t MetricGroupDEntries;
         uint16_t InterruptEntries;
     } parameters;
 
@@ -142,38 +154,13 @@ union SchedulerConfig
     char data[sizeof(SchedulerConfig::parameters)];
 };
 
-
-/** The User can define MAX_BUFFER_READING_TIMES 
- */
-union SendSchedulerConfig
-{
-    struct 
-    {   
-        uint16_t time_comparator;
-    } parameters;
-
-    char data[sizeof(SendSchedulerConfig::parameters)];
-};
-
-union ClockSynchFlag
-{
-    struct 
-    {  
-        uint16_t time_comparator;
-        bool clockSynchOn;
-        
-    } parameters;
-
-    char data[sizeof(ClockSynchFlag::parameters)];
-};
-
 /** Program specific flags. Every bit is a different flag. 0:SENSE, 1:SEND, 2:CLOCK, 3:KICK
  */
 union FlagsConfig
 {
     struct 
     {    
-        uint8_t value;
+        uint16_t value;
         bool  flag;
          
     } parameters;
@@ -181,7 +168,7 @@ union FlagsConfig
     char data[sizeof(FlagsConfig::parameters)];
 };
 
-union NextTimeConfig
+union TimeConfig
 {
     struct 
     {
@@ -189,7 +176,7 @@ union NextTimeConfig
         
     } parameters;
 
-    char data[sizeof(NextTimeConfig::parameters)];
+    char data[sizeof(TimeConfig::parameters)];
 };
 
 union IncrementAConfig
@@ -221,18 +208,6 @@ union IncrementCConfig
     char data[sizeof(IncrementCConfig::parameters)];
 };
 
-/** MetricGroupTimes Config for storing the values of ,MetricGroupTimes Config, Time Config
- */
-union MetricGroupTimesConfig
-{
-    struct 
-    {   
-        uint32_t time_comparator; 
-    } parameters;
-
-    char data[sizeof(MetricGroupTimesConfig::parameters)];
-};
-
 
 /**TODO: Merge with ssck_flags group,Flags for each group */
 union MetricGroupConfig
@@ -245,18 +220,6 @@ union MetricGroupConfig
 
     char data[sizeof(MetricGroupConfig::parameters)];
 
-};
-/** Holds only the next sleeping time (time difference)
- */
-union TimeConfig
-{
-    struct 
-    {
-        uint16_t time_comparator;
-        
-    } parameters;
-
-    char data[sizeof(TimeConfig::parameters)];
 };
 
 union ErrorConfig
@@ -275,27 +238,26 @@ union ErrorConfig
 enum Filenames
 {
     ErrorConfig_n                   = 0, /**Holds an increment of concecutives errors */
-    MetricGroupAConfig_n            = 1, 
+    DeviceConfig_n                  = 1, 
     SchedulerConfig_n               = 2,
-    ClockSynchFlag_n                = 3,
-    FlagSSCKConfig_n                = 4, 
-    IncrementAConfig_n              = 5,
-    MetricGroupTimesConfig_n        = 6, 
+    SendSchedulerConfig_n           = 3,
+    ClockSynchFlag_n                = 4,
+    FlagSSCKConfig_n                = 5,
+    NextTimeConfig_n                = 6,
     TimeConfig_n                    = 7,
-    TempMetricGroupTimesConfig_n    = 8,
-    NextTimeConfig_n                = 9,
-    SendSchedulerConfig_n           = 10,
-    MetricGroupConfig_n             = 11,
-    IncrementBConfig_n              = 12,
-    IncrementCConfig_n              = 13,
-    MetricGroupBConfig_n            = 14,
-    MetricGroupCConfig_n            = 15,
-    MetricGroupDConfig_n            = 16,
-    MetricGroupEntriesConfig_n      = 17,
-    InterruptConfig_n               = 18,
-    MemoryFlagConfig_n              = 19
+    MetricGroupConfig_n             = 8,
+    MetricGroupTimesConfig_n        = 9, 
+    TempMetricGroupTimesConfig_n    = 10,
+    MetricGroupAConfig_n            = 11,
+    MetricGroupBConfig_n            = 12,
+    MetricGroupCConfig_n            = 13,
+    MetricGroupDConfig_n            = 14,
+    MetricGroupEntriesConfig_n      = 15,
+    InterruptConfig_n               = 16,
+    IncrementAConfig_n              = 17,
+    IncrementBConfig_n              = 18,
+    IncrementCConfig_n              = 19,
 
-    
  };
 
 /** Nodeflow Class
@@ -364,7 +326,7 @@ class NodeFlow: public DataManager
          * @param scl I2C clock line pin
          * @param frequency_hz The bus frequency in hertz. 
          */
-        NodeFlow(PinName write_control=TP_EEPROM_WC, PinName sda=TP_I2C_SDA, PinName scl=TP_I2C_SCL, int frequency_hz=TP_I2C_FREQ, //=100000
+        NodeFlow(PinName write_control=TP_EEPROM_WC, PinName sda=TP_I2C_SDA, PinName scl=TP_I2C_SCL, int frequency_hz=100000, 
                 PinName mosi=TP_LORA_SPI_MOSI, PinName miso=TP_LORA_SPI_MISO, PinName sclk=TP_LORA_SPI_SCK, PinName nss=TP_LORA_SPI_NSS, PinName reset=TP_LORA_RESET,
                 PinName dio0=PB_4, PinName dio1=PB_1, PinName dio2=PB_0, PinName dio3=PC_13, PinName dio4=NC, PinName dio5=NC, PinName rf_switch_ctl1=NC, 
                 PinName rf_switch_ctl2=NC, PinName txctl=NC, PinName rxctl=NC, PinName ant_switch=NC, PinName pwr_amp_ctl=NC, PinName tcxo=TP_VDD_TCXO,PinName done=TP_DONE);
@@ -415,6 +377,8 @@ class NodeFlow: public DataManager
         /** start() drives all the application. It handles the different modem and configuration.
          */
         void start();
+
+        int CreateFile(DataManager_FileSystem::File_t file, uint8_t filename, int struct_size, int length);
         /**Template function for handling the different data types
          */
         template <typename DataType>
@@ -422,9 +386,10 @@ class NodeFlow: public DataManager
          *
          *@param data Actual data to be written to the eeprom
          */
-        void add_record(DataType data, string str1=NULL);
+        void add_record(DataType data, string str=NULL);
 
-        
+        void UploadNow();
+
         /**Increment with a value.
          * 
          *@param i increment value
@@ -466,13 +431,15 @@ class NodeFlow: public DataManager
          */
         int read_inc_c(uint64_t& increment_value);
         
-        //get filename from the 
-        int create_file(uint8_t filename, int length);
+        #if BOARD == EARHART_V1_0_0 || BOARD == DEVELOPMENT_BOARD_V1_1_0 /* #endif at EoF */
+        void getDevAddr();
+        #endif
 
         //todo: move this
-        void read_write_entry(uint8_t group_tag, int len, uint8_t filename);
+        void read_write_entry(uint8_t group_tag, int start_len, int end_len, uint8_t filename);
     private:
 
+        void _test_provision();
         void _oob_enter_test();
 
         void _oob_gpio_test_handler();
@@ -520,12 +487,7 @@ class NodeFlow: public DataManager
          */ 
         int timetoseconds(float scheduler_time, uint8_t group_id);
         
-        /** Initialise the time config file. Holds the time until the next wakeup
-         *                 
-         * @return          time_comparator
-         *                  
-         */ 
-        int time_config_init();
+      
         /** Holds the time until the next wakeup
          *                 
          * @return          time_comparator
@@ -707,28 +669,31 @@ class NodeFlow: public DataManager
          */
         int get_metric_flags(uint8_t &flag);
 
-        int cbor_object_string(const string& object_str, const string& input_str);
+
         int add_payload_data(uint8_t metric_group_flag);
         
         void _sense();
-        void _send(bool interrupt_send);
+        int _send();
+        int _divide_to_blocks(uint8_t group, uint8_t filename, uint16_t buffer_len, uint16_t&available);
+        int _send_blocks();
+        
         /**Adds a bytes of sensing entries added as record by the user.
          */
         int add_sensing_entry(uint8_t value, uint8_t metric_group);
 
-        bool is_overflow();
+        void is_overflow();
 
         /**Counter for each metric group entry
          * 
          *@param mg_flag which metric group to increment
          */
-        int mg_counter( uint8_t mg_flag);
+        int increase_mg_entries_counter( uint8_t mg_flag);
 
         /**Read current counter for each metric group entry
          * 
          *@return mg_entries for each group
          */
-        int read_mg_counter(uint16_t& mga_entries, uint16_t& mgc_entries,uint16_t& mgd_entries, uint16_t& mgb_entries,uint8_t & metric_group_active);
+        int read_mg_entries_counter(uint16_t& mga_entries, uint16_t& mgc_entries,uint16_t& mgd_entries, uint16_t& mgb_entries, uint16_t& interrupt_entries, uint8_t & metric_group_active);
         
         /**Read current bytes written for each metric group
          * 
@@ -739,8 +704,7 @@ class NodeFlow: public DataManager
         /** INTERRUPT**************************************************************************************************/
         /** Handle Interrupt 
          */
-        int read_interrupt_counter(uint16_t& interrupt_entries);
-
+       
         int is_delay_pin_wakeup_flag();
 
         int correct_latency(int latency);
@@ -794,31 +758,8 @@ class NodeFlow: public DataManager
        
         /** LORAWAN **************************************************************************************************/
         #if BOARD == EARHART_V1_0_0
-
-        /** Send a message from the Network Server on a specific port.
-         *
-         * @param port          The application port number. Port numbers 0 and 224 are reserved,
-         *                      whereas port numbers from 1 to 223 (0x01 to 0xDF) are valid port numbers.
-         *                      Anything out of this range is illegal.
-         * @param payload       The buffer to be sent.
-         * @param length        The size of data in bytes.
-         * @return              It could be one of these:
-         *                       i)  Number of bytes send on sucess.
-         *                       ii) A negative error code on failure
-         *                      LORAWAN_STATUS_NOT_INITIALIZED   if system is not initialized with initialize(),
-         *                      LORAWAN_STATUS_NO_ACTIVE_SESSIONS if connection is not open,
-         *                      LORAWAN_STATUS_WOULD_BLOCK       if another TX is ongoing,
-         *                      LORAWAN_STATUS_PORT_INVALID      if trying to send to an invalid port (e.g. to 0)
-         *                      LORAWAN_STATUS_PARAMETER_INVALID if NULL data pointer is given or flags are invalid
-         */        
-        int sendTTN(uint8_t port, uint8_t payload[], uint16_t length);
-        
-        /** Receive a message from the Network Server on a specific port.
-         *
-         * @param port          The application port number. Port numbers 0 and 224 are reserved,
-         *                      whereas port numbers from 1 to 223 (0x01 to 0xDF) are valid port numbers.
-         *                      
-         * @param rx_message    Received message.
+    
+        /** Handles received messages from the Network Server .
          *
          * @return              It could be one of these:
          *                       i)  Number of bytes send on sucess.
@@ -829,7 +770,7 @@ class NodeFlow: public DataManager
          *                      LORAWAN_STATUS_PORT_INVALID      if trying to send to an invalid port (e.g. to 0)
          *                      LORAWAN_STATUS_PARAMETER_INVALID if NULL data pointer is given or flags are invalid
          */
-        int receiveTTN(uint32_t& rx_message, uint8_t& rx_port);
+        int handle_receive();
 
         #endif /* #if BOARD == EARHART_V1_0_0 */
         /** LORAWAN END **********************************************************************************************/
@@ -881,7 +822,14 @@ class NodeFlow: public DataManager
             float* scheduler;
         #endif
         uint8_t* buffer;
+        uint8_t* buff; //todo remove
+        char* recv_data;
         int status;
+        bool upload_flag=false;
+
+        uint8_t send_block_number=0;
+        uint8_t total_blocks=0;
+
         // int filenames_len=Filenames::length;
         /**
          */
@@ -892,6 +840,7 @@ class NodeFlow: public DataManager
             LORAWAN_TP_FAILED           = -2,
             NBIOT_TP_FAILED             = -3,
             EEPROM_DRIVER_FAILED        = -4,
+            SEND_FAILED                 = -5
 
         };
 };

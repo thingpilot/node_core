@@ -11,7 +11,6 @@
  */
 #include "node_flow.h"
 
-
 /** Constructor. Create a NodeFlow interface, connected to the pins specified 
  *  operating at the specified frequency
  * 
@@ -51,40 +50,6 @@ NodeFlow::NodeFlow(PinName write_control, PinName sda, PinName scl, int frequenc
  {
  }
 
-#if BOARD == WRIGHT_V1_0_0
-int NodeFlow::initialise_nbiot()
-{
-    if(_comms_stack == Comms_Radio_Stack::NBIOT)
-    {
-        status=_radio.ready();
-        
-        if(status == NodeFlow::NODEFLOW_OK)
-        {
-            char ipv4[] = "68.183.254.233";
-            uint16_t port= 5683;
-            char uri[] = "coap://68.183.254.233:5683/";
-            uint8_t uri_length=27;
-            status=_radio.configure_coap(ipv4, port, uri, uri_length);
-            if(status != NodeFlow::NODEFLOW_OK)
-            {
-                debug("\nCoap server not configured %d\r\n",status);
-                return status;
-            }
-
-            status = _radio.start(5);
-            if(status != NodeFlow::NODEFLOW_OK)
-            {
-                debug("\nRadio not initialised %d\r\n",status);
-                //return status;
-            }
-        }
-       
-        
-    }
-    return status;      
-}
-#endif /* #if BOARD == WRIGHT_V1_0_0 */
-
 
 void NodeFlow::_oob_enter_test()
 {
@@ -112,7 +77,6 @@ void NodeFlow::_run()
     INIT_STATE = Init_State::RUN;
 }
 
-
 /** Start the device. kick the watchdog, initialise files, 
  *  Find the Wakeup type. 
  */
@@ -133,27 +97,25 @@ void NodeFlow::start()
             tformatter.get_entries(c_entries);
             if (c_entries > 1)
             {
+                increase_mg_entries_counter(0);
+                add_payload_data(0);
                 #if(!SEND_SCHEDULER)
-                    mg_counter(1);
-                    _send(true);
+                    _send();
                 #endif /* #if(!SEND_SCHEDULER) */
-
-                #if(SEND_SCHEDULER)
-                    mg_counter(0);
-                    add_payload_data(0);
-                    if( is_overflow())
-                    {
-                        _send(false);
-                    }
-                #endif /* #if(SEND_SCHEDULER) */
             }
+            #if(SEND_SCHEDULER)
+                if(upload_flag)
+                {
+                    _send();
+                }
+            #endif /* #if(SEND_SCHEDULER) */
+            is_overflow();
             get_interrupt_latency(next_time);
             if(next_time>INTERRUPT_DELAY)
             {
                 next_time=INTERRUPT_DELAY;
                 set_wakeup_pin_flag(true);
             }
-        
             enter_standby(next_time,false);
         #endif
     }
@@ -174,12 +136,13 @@ void NodeFlow::start()
             if(wakeup_flag==NodeFlow::FLAG_SENSING || wakeup_flag==NodeFlow::FLAG_SENSE_SEND ||
                 wakeup_flag==NodeFlow::FLAG_SENSE_SEND_SYNCH || wakeup_flag==NodeFlow::FLAG_SENSE_SYNCH)
             {
+                is_overflow();
                 _sense();
             }
             if(wakeup_flag==NodeFlow::FLAG_SENDING || wakeup_flag==NodeFlow::FLAG_SENSE_SEND ||
                 wakeup_flag==NodeFlow::FLAG_SEND_SYNCH || wakeup_flag==NodeFlow::FLAG_SENSE_SEND_SYNCH)
             { 
-                _send(false);
+                _send();
             }
 
             time_t end_time=time_now();
@@ -191,7 +154,7 @@ void NodeFlow::start()
                 ||wakeup_flag == NodeFlow::FLAG_SEND_SYNCH || wakeup_flag== NodeFlow::FLAG_SENSE_SEND_SYNCH)
             {
                 get_timestamp();
-                set_scheduler(0, next_time);//todo: CHECK
+                set_scheduler(0, next_time);
             }
             timetodate(time_now());
            
@@ -199,126 +162,54 @@ void NodeFlow::start()
     }
     else if(wkp==TP_Sleep_Manager::WakeupType_t::WAKEUP_RESET || wkp==TP_Sleep_Manager::WakeupType_t::WAKEUP_SOFTWARE) 
     {
-        debug("\r\n                      __|__\n               --+--+--(_)--+--+--\n-------------------THING PILOT--------------------\r\n");
-        debug("\nDevice Unique ID: %08X %08X %08X \r", STM32_UID[0], STM32_UID[1], STM32_UID[2]);
-        wait_us(1000);
-        status=initialise();
+        bool initialised = false;
+        #if BOARD == EARHART_V1_0_0
+            DigitalIn btn(PA_8);
+        #endif
+        #if BOARD == WRIGHT_V1_0_0
+            DigitalIn btn(PB_0);
+        #endif
+        status=DataManager::is_initialised(initialised);
+        if(btn.read() || !initialised)
+        {
+            initialised=false;
+            while(!initialised)
+            {   
+                set_time(0);
+                status=initialise();
+                DataManager::is_initialised(initialised);
+            }
+        }
+
         if (status != NODEFLOW_OK)
         { 
             NVIC_SystemReset(); 
         }
-        
-        wait_us(300000);
-
-        {
-            ATCmdParser *_parser;
-
-            _parser = new ATCmdParser(mbed_file_handle(STDOUT_FILENO));
-            _parser->set_delimiter("\r\n");
-            _parser->set_timeout(1000);
-
-            _parser->oob("TEST", callback(this, &NodeFlow::_oob_enter_test));
-            _parser->oob("PROV", callback(this, &NodeFlow::_oob_enter_prov));
-            _parser->oob("AT+END", callback(this, &NodeFlow::_oob_end_handler));
-
-            _parser->send("AT+CTRL");
-            if(_parser->recv("OK"))
-            {
-                switch(INIT_STATE)
-                {
-                    case Init_State::TEST: 
-                    {
-                        _parser->oob("AT+GPIO", callback(this, &NodeFlow::_oob_gpio_test_handler));
-
-                        while(INIT_STATE == Init_State::TEST)
-                        {
-                            switch(TEST_STATE)
-                            {
-                                case Test_State::GPIO_TEST: 
-                                {
-                                    int pin, state = 0;
-                                    _parser->recv("=%i,%i", &pin, &state);
-
-                                    DigitalOut test_pin((PinName)pin, state);                    
-                                    _parser->send("GPIO: %i, %i", pin, state);
-                                    
-                                    if(_parser->recv("OK"))
-                                    {
-                                        TEST_STATE = Test_State::WFC;
-                                        break;
-                                    }
-
-                                    TEST_STATE = Test_State::WFC;
-                                    break;
-                                }
-                                case Test_State::WFC: 
-                                {
-                                    _parser->process_oob();
-                                    break;
-                                }
-                                case Test_State::END:
-                                {
-                                    _parser->send("OK");
-                                    _run();
-                                    break;
-                                }    
-                            }
-                        }
-
-                        break;
-                    }
-                    case Init_State::PROV:
-                    {
-                        while(INIT_STATE == Init_State::PROV)
-                        {
-                            switch(PROV_STATE)
-                            {
-                                case Prov_State::PROVISION: 
-                                {
-                                    _parser->process_oob();
-                                    break;
-                                }
-                                case Prov_State::WFC: 
-                                {
-                                    _parser->process_oob();
-                                    break;
-                                }
-                                case Prov_State::END: 
-                                {
-                                    _parser->send("OK");
-                                    _run();
-                                    break;
-                                }
-                            }
-                        }
-
-                        break;
-                    }
-                }
-            }
-
-            delete _parser;
-        }
-
+        status=DataManager::init_gstats();
+                
+        _test_provision();
+    
+        debug("\r\n                      __|__\n               --+--+--(_)--+--+--\n-------------------THING PILOT--------------------\r\n");
+        debug("\nDevice Unique ID: %08X %08X %08X", STM32_UID[0], STM32_UID[1], STM32_UID[2]);
         #if BOARD == WRIGHT_V1_0_0
-            debug("\r\nInitialising NB-IOT..");
             initialise_nbiot();
         #endif /* #if BOARD == WRIGHT_V1_0_0 */
+        debug("\r\n----------------------SETUP-----------------------");
         setup(); /** Pure virtual by the user */
-
-        if(CLOCK_SYNCH) //todo: time synch everyday? every two/three user can choose?
+        if(CLOCK_SYNCH) 
         {
             get_timestamp();
+            timetodate(time_now());
         }
-        timetodate(time_now());
+        
         start_time=time_now();
         init_sched_config();
         init_send_sched_config();
         set_scheduler(0,next_time); 
     }
 
-    debug("\nGoing to sleep for %d ",next_time);
-    timetodate(time_now());
+    debug("\nGoing to sleep for %d s.",next_time);
+    timetodate(next_time+time_now());
     
     #if (INTERRUPT_ON) //todo: bug
         if (next_time<15) //to prevent more delays
@@ -333,29 +224,118 @@ void NodeFlow::start()
     #if (!INTERRUPT_ON)
         enter_standby(next_time,false);
     #endif
-
 }
 
+
+void NodeFlow::_test_provision()
+{
+    wait_us(300000);
+    ATCmdParser *_parser;
+
+    _parser = new ATCmdParser(mbed_file_handle(STDOUT_FILENO));
+    _parser->set_delimiter("\r\n");
+    _parser->set_timeout(1000);
+
+    _parser->oob("TEST", callback(this, &NodeFlow::_oob_enter_test));
+    _parser->oob("PROV", callback(this, &NodeFlow::_oob_enter_prov));
+    _parser->oob("AT+END", callback(this, &NodeFlow::_oob_end_handler));
+
+    _parser->send("AT+CTRL");
+    if(_parser->recv("OK"))
+    {
+        switch(INIT_STATE)
+        {
+            case Init_State::TEST: 
+            {
+                _parser->oob("AT+GPIO", callback(this, &NodeFlow::_oob_gpio_test_handler));
+
+                while(INIT_STATE == Init_State::TEST)
+                {
+                    switch(TEST_STATE)
+                    {
+                        case Test_State::GPIO_TEST: 
+                        {
+                            int pin, state = 0;
+                            _parser->recv("=%i,%i", &pin, &state);
+
+                            DigitalOut test_pin((PinName)pin, state);                    
+                            _parser->send("GPIO: %i, %i", pin, state);
+                            
+                            if(_parser->recv("OK"))
+                            {
+                                TEST_STATE = Test_State::WFC;
+                                break;
+                            }
+
+                            TEST_STATE = Test_State::WFC;
+                            break;
+                        }
+                        case Test_State::WFC: 
+                        {
+                            _parser->process_oob();
+                            break;
+                        }
+                        case Test_State::END:
+                        {
+                            _parser->send("OK");
+                            _run();
+                            break;
+                        }    
+                    }
+                }
+
+                break;
+            }
+            case Init_State::PROV:
+            {
+                while(INIT_STATE == Init_State::PROV)
+                {
+                    switch(PROV_STATE)
+                    {
+                        case Prov_State::PROVISION: 
+                        {
+                            _parser->process_oob();
+                            break;
+                        }
+                        case Prov_State::WFC: 
+                        {
+                            _parser->process_oob();
+                            break;
+                        }
+                        case Prov_State::END: 
+                        {
+                            _parser->send("OK");
+                            _run();
+                            break;
+                        }
+                    }
+                }
+
+                break;
+            }
+        }
+    }
+
+    delete _parser;
+
+}
 
 /** Initialise the EEPROM
  * @return Status
  */
 int NodeFlow::initialise()
 {    
+    DigitalOut buzzer(TP_SPI_NSS); //todo: remove specific to the app
+    buzzer=1;
+    ThisThread::sleep_for(50);
+    buzzer=0;
+
     status=DataManager::init_filesystem();
     if(status != NODEFLOW_OK)
     {
-        debug("\r\nInit error. Line: %d,status: %d, %s",__LINE__, status,__PRETTY_FUNCTION__);
         return status;
     }
-
-    bool initialised = false;
-    status=DataManager::is_initialised(initialised);
-    if(status != NODEFLOW_OK)
-    {
-        debug("\r\nInit error. Line: %d,status: %d, %s",__LINE__, status,__PRETTY_FUNCTION__);
-        return status;
-    }
+    status=DataManager::init_gstats();
 
     DataManager_FileSystem::File_t ErrorConfig_File_t;
     ErrorConfig_File_t.parameters.filename = ErrorConfig_n;
@@ -364,7 +344,6 @@ int NodeFlow::initialise()
     status=DataManager::add_file(ErrorConfig_File_t, 1); 
     if(status != NODEFLOW_OK)
     {
-        debug("\r\nLine: %d,status: %d, %s",__LINE__, status,__PRETTY_FUNCTION__);
         return status;
     }
     ErrorConfig e_conf;
@@ -372,11 +351,53 @@ int NodeFlow::initialise()
     status= DataManager::overwrite_file_entries(ErrorConfig_n, e_conf.data, sizeof(e_conf.parameters));
     if (status != NODEFLOW_OK)
     {
-        debug("\r\nLine: %d,status: %d, %s",__LINE__, status,__PRETTY_FUNCTION__);
         return status;    
     }
 
-    /** SchedulerConfig */
+    /**Device specifics */
+    DataManager_FileSystem::File_t DeviceConfig_File_t;
+    DeviceConfig_File_t.parameters.filename = DeviceConfig_n;
+    DeviceConfig_File_t.parameters.length_bytes = sizeof(DeviceConfig::parameters);
+    status=DataManager::add_file(DeviceConfig_File_t, 1); 
+    if(status != NODEFLOW_OK)
+    {
+        return status;
+    }
+    #if BOARD == EARHART_V1_0_0 || BOARD == DEVELOPMENT_BOARD_V1_1_0 /* #endif at EoF */
+    DeviceConfig dev_conf;
+    
+    #if(OVER_THE_AIR_ACTIVATION)
+        dev_conf.parameters.otaa=0;
+        for(int i=0; i<8; i++)
+        {
+            dev_conf.parameters.device_eui[i]=DevEUI[i];
+            dev_conf.parameters.application_eui[i]=AppEUI[i];
+        }
+        for(int i=0; i<16; i++)
+        {
+            dev_conf.parameters.application_key[i]=AppKey[i];
+        }
+
+   #endif
+    #if(!OVER_THE_AIR_ACTIVATION)
+        dev_conf.parameters.otaa=1;
+        dev_conf.parameters.device_address=DevAddr;
+        debug("\r\n");
+        for(int i=0; i<16; i++)
+        {
+            dev_conf.parameters.net_session_key[i]=NetSKey[i];
+            dev_conf.parameters.app_session_key[i]=AppSKey[i];
+        }
+    #endif
+    
+    status= DataManager::overwrite_file_entries(DeviceConfig_n, dev_conf.data, sizeof(dev_conf.parameters));
+    if (status != NODEFLOW_OK)
+    {
+        return status;    
+    }
+
+    #endif
+        /** SchedulerConfig */
     DataManager_FileSystem::File_t SchedulerConfig_File_t;
     SchedulerConfig_File_t.parameters.filename = SchedulerConfig_n;  
     SchedulerConfig_File_t.parameters.length_bytes = sizeof(SchedulerConfig::parameters);
@@ -384,7 +405,6 @@ int NodeFlow::initialise()
     status=DataManager::add_file(SchedulerConfig_File_t, MAX_BUFFER_READING_TIMES+2); 
     if(status != NODEFLOW_OK)
     {
-        debug("\r\nLine: %d,status: %d, %s",__LINE__, status,__PRETTY_FUNCTION__);
         return status;   
     }
 
@@ -393,7 +413,6 @@ int NodeFlow::initialise()
     status= DataManager::overwrite_file_entries(SchedulerConfig_n, s_conf.data, sizeof(s_conf.parameters));
     if (status != NODEFLOW_OK)
     {
-        debug("\r\nLine: %d,status: %d, %s",__LINE__, status,__PRETTY_FUNCTION__);
         return status;    
     }
 
@@ -401,13 +420,14 @@ int NodeFlow::initialise()
      */
     DataManager_FileSystem::File_t SendSchedulerConfig_File_t;
     SendSchedulerConfig_File_t.parameters.filename = SendSchedulerConfig_n;  
-    SendSchedulerConfig_File_t.parameters.length_bytes = sizeof( SendSchedulerConfig::parameters);
+    SendSchedulerConfig_File_t.parameters.length_bytes = sizeof( TimeConfig::parameters);
     #if(SEND_SCHEDULER)
         #if BOARD == EARHART_V1_0_0
-            debug("\r\nWARNING!! SEND SCHEDULER IS ON FOR EARHART BOARD\r\nVisit https://www.loratools.nl/#/airtime to find \r\nout more. Max payload size supported 255 bytes\r\n");     
+            debug("\r\nWARNING!! SEND SCHEDULER IS ON FOR EARHART BOARD\r\nVisit https://www.loratools.nl/#/airtime to find \r\nout more. Max payload per msg 255 bytes\r\n");     
         #endif /* #if BOARD == EARHART_V1_0_0 */
         status=DataManager::add_file(SendSchedulerConfig_File_t, MAX_BUFFER_SENDING_TIMES+2); 
     #endif /* #if(SEND_SCHEDULER) */
+    
     #if(!SEND_SCHEDULER)
         status=DataManager::add_file(SendSchedulerConfig_File_t, 2);
     #endif /* #if(!SEND_SCHEDULER) */
@@ -416,7 +436,7 @@ int NodeFlow::initialise()
         return status;   
     }
 
-    SendSchedulerConfig ss_conf;
+    TimeConfig ss_conf;
     ss_conf.parameters.time_comparator=0;
     status= DataManager::overwrite_file_entries(SendSchedulerConfig_n, ss_conf.data, sizeof(ss_conf.parameters));
     if (status != NODEFLOW_OK)
@@ -428,7 +448,7 @@ int NodeFlow::initialise()
      */
     DataManager_FileSystem::File_t ClockSynchFlag_File_t;
     ClockSynchFlag_File_t.parameters.filename = ClockSynchFlag_n;
-    ClockSynchFlag_File_t.parameters.length_bytes = sizeof( ClockSynchFlag::parameters);
+    ClockSynchFlag_File_t.parameters.length_bytes = sizeof( FlagsConfig::parameters);
 
     status=DataManager::add_file(ClockSynchFlag_File_t, 1); 
     if(status != NODEFLOW_OK)
@@ -459,18 +479,112 @@ int NodeFlow::initialise()
     }
     status=set_flags_config(0);  
 
-    /** MemoryFlagConfig. Memory full notation
-     */
-    DataManager_FileSystem::File_t MemoryFlagConfig_File_t;
-    MemoryFlagConfig_File_t.parameters.filename = MemoryFlagConfig_n;
-    MemoryFlagConfig_File_t.parameters.length_bytes = sizeof(FlagsConfig::parameters);
+    DataManager_FileSystem::File_t NextTimeConfig_File_t;
+    NextTimeConfig_File_t.parameters.filename = NextTimeConfig_n;
+    NextTimeConfig_File_t.parameters.length_bytes = sizeof(TimeConfig::parameters);
 
-    status=DataManager::add_file(MemoryFlagConfig_File_t, 1);
+    status=DataManager::add_file(NextTimeConfig_File_t, 1);
     if(status != NODEFLOW_OK)
     {
         return status;   
     }
-      
+
+    DataManager_FileSystem::File_t TimeConfig_File_t;
+    TimeConfig_File_t.parameters.filename = TimeConfig_n;
+    TimeConfig_File_t.parameters.length_bytes = sizeof(TimeConfig::parameters);
+    status = DataManager::add_file(TimeConfig_File_t, 1);
+    if(status != NODEFLOW_OK)
+    {
+        ErrorHandler(__LINE__,"TimeConfig",status,__PRETTY_FUNCTION__);  
+        return status;
+    }
+    
+    status = set_time_config(0);
+
+    DataManager_FileSystem::File_t MetricGroupConfig_File_t;
+    MetricGroupConfig_File_t.parameters.filename = MetricGroupConfig_n;
+    MetricGroupConfig_File_t.parameters.length_bytes = sizeof(MetricGroupConfig::parameters);
+
+    status = DataManager::add_file(MetricGroupConfig_File_t, 1);
+    if(status != NODEFLOW_OK)
+    {
+        return status;
+    }
+
+    #if (INTERRUPT_ON)
+    DataManager_FileSystem::File_t InterruptConfig_File_t;
+    InterruptConfig_File_t.parameters.filename = InterruptConfig_n;
+    InterruptConfig_File_t.parameters.length_bytes = sizeof(DataConfig::parameters);
+
+    status = DataManager::add_file(InterruptConfig_File_t, 14000/(METRIC_GROUPS_ON+1)); 
+    if(status != NODEFLOW_OK)
+    {
+        return status;
+    }
+    #endif
+  
+    DataManager_FileSystem::File_t MetricGroupAConfig_File_t;
+    MetricGroupAConfig_File_t.parameters.filename = MetricGroupAConfig_n;
+    MetricGroupAConfig_File_t.parameters.length_bytes = sizeof(DataConfig::parameters);
+    
+    #if (METRIC_GROUPS_ON > 0)
+    status = DataManager::add_file(MetricGroupAConfig_File_t, 14000/(METRIC_GROUPS_ON+1));
+    if(status != NODEFLOW_OK)
+    {
+        return status;
+    }
+    #endif
+
+    #if (SCHEDULER_B || METRIC_GROUPS_ON >=2)
+    DataManager_FileSystem::File_t MetricGroupBConfig_File_t;
+    MetricGroupBConfig_File_t.parameters.filename = MetricGroupBConfig_n;
+    MetricGroupBConfig_File_t.parameters.length_bytes = sizeof(DataConfig::parameters);
+
+    status = DataManager::add_file(MetricGroupBConfig_File_t, 14000/(METRIC_GROUPS_ON+1));
+    if(status != NODEFLOW_OK)
+    {
+        return status;
+    }
+    #endif /* #if (SCHEDULER_B || METRIC_GROUPS_ON==2) */
+
+    #if (SCHEDULER_C || METRIC_GROUPS_ON >=3)
+        DataManager_FileSystem::File_t MetricGroupCConfig_File_t;
+        MetricGroupCConfig_File_t.parameters.filename = MetricGroupCConfig_n;
+        MetricGroupCConfig_File_t.parameters.length_bytes = sizeof(DataConfig::parameters);
+        status = DataManager::add_file(MetricGroupCConfig_File_t, 14000/(METRIC_GROUPS_ON+1));
+    
+        if(status != NODEFLOW_OK)
+        {
+            return status;
+        }
+
+    #endif /* #if (SCHEDULER_C || METRIC_GROUPS_ON==3) */
+
+    #if (SCHEDULER_D|| METRIC_GROUPS_ON==4)
+        DataManager_FileSystem::File_t MetricGroupDConfig_File_t;
+        MetricGroupDConfig_File_t.parameters.filename = MetricGroupDConfig_n;
+        MetricGroupDConfig_File_t.parameters.length_bytes = sizeof(DataConfig::parameters);
+
+        status = DataManager::add_file(MetricGroupDConfig_File_t, 14000/(METRIC_GROUPS_ON+1));
+        if(status != NODEFLOW_OK)
+        {
+            return status;
+        }
+    #endif /* #if (SCHEDULER_B || METRIC_GROUPS_ON=42) */
+    
+   
+    DataManager_FileSystem::File_t MetricGroupEntriesConfig_File_t;
+    MetricGroupEntriesConfig_File_t.parameters.filename = MetricGroupEntriesConfig_n;
+    MetricGroupEntriesConfig_File_t.parameters.length_bytes = sizeof(MetricGroupEntriesConfig::parameters);
+
+    status = DataManager::add_file(MetricGroupEntriesConfig_File_t, 1); 
+    if(status != NODEFLOW_OK)
+    {
+        return status;
+    }
+
+    clear_mg_counter();
+
     /** IncrementAConfig
      */
     DataManager_FileSystem::File_t IncrementAConfig_File_t;
@@ -529,141 +643,87 @@ int NodeFlow::initialise()
     {
         return status; 
     }
-
-    DataManager_FileSystem::File_t NextTimeConfig_File_t;
-    NextTimeConfig_File_t.parameters.filename = NextTimeConfig_n;
-    NextTimeConfig_File_t.parameters.length_bytes = sizeof(NextTimeConfig::parameters);
-
-    status=DataManager::add_file(NextTimeConfig_File_t, 1);
-    if(status != NODEFLOW_OK)
-    {
-        return status;   
-    }
-
-    DataManager_FileSystem::File_t MetricGroupConfig_File_t;
-    MetricGroupConfig_File_t.parameters.filename = MetricGroupConfig_n;
-    MetricGroupConfig_File_t.parameters.length_bytes = sizeof(MetricGroupConfig::parameters);
-
-    status = DataManager::add_file(MetricGroupConfig_File_t, 1);
-    if(status != NODEFLOW_OK)
-    {
-        return status;
-    }
-    #if (INTERRUPT_ON)
-        DataManager_FileSystem::File_t InterruptConfig_File_t;
-        InterruptConfig_File_t.parameters.filename = InterruptConfig_n;
-        InterruptConfig_File_t.parameters.length_bytes = sizeof(DataConfig::parameters);
-       
-        #if BOARD == EARHART_V1_0_0
-            status = DataManager::add_file(InterruptConfig_File_t, 300);
-        #endif /* #if BOARD == EARHART_V1_0_0 */
-        #if BOARD == WRIGHT_V1_0_0
-             status = DataManager::add_file(InterruptConfig_File_t, 2000); 
-        #endif
-        if(status != NODEFLOW_OK)
-        {
-            debug("\r\nInterruptConfig_File_t");
-            return status;
-        }
-    #endif
-
-    DataManager_FileSystem::File_t MetricGroupAConfig_File_t;
-    MetricGroupAConfig_File_t.parameters.filename = MetricGroupAConfig_n;
-    MetricGroupAConfig_File_t.parameters.length_bytes = sizeof(DataConfig::parameters);
-    
-    #if (METRIC_GROUPS_ON > 0)
-        #if BOARD == EARHART_V1_0_0
-            status = DataManager::add_file(MetricGroupAConfig_File_t, 1200/METRIC_GROUPS_ON);
-        #endif /* #if BOARD == EARHART_V1_0_0 */
-        #if BOARD == WRIGHT_V1_0_0    
-            status = DataManager::add_file(MetricGroupAConfig_File_t, 4000);
-        #endif
-        if(status != NODEFLOW_OK)
-        {
-            debug("\r\nMetricGroupAConfig_File_t");
-            return status;
-        }
-    #endif
-    #if (SCHEDULER_B || METRIC_GROUPS_ON >=2)
-        DataManager_FileSystem::File_t MetricGroupBConfig_File_t;
-        MetricGroupBConfig_File_t.parameters.filename = MetricGroupBConfig_n;
-        MetricGroupBConfig_File_t.parameters.length_bytes = sizeof(DataConfig::parameters);
-
-        #if BOARD == EARHART_V1_0_0
-            status = DataManager::add_file(MetricGroupBConfig_File_t, 1200/METRIC_GROUPS_ON);
-        #endif /* #if BOARD == EARHART_V1_0_0 */
-        #if BOARD == WRIGHT_V1_0_0 
-            status = DataManager::add_file(MetricGroupBConfig_File_t, 3000);
-        #endif
-        if(status != NODEFLOW_OK)
-        {
-            debug("\r\nMetricGroupBConfig_File_t");
-            return status;
-        }
-    #endif /* #if (SCHEDULER_B || METRIC_GROUPS_ON==2) */
-
-    #if (SCHEDULER_C || METRIC_GROUPS_ON >=3)
-        DataManager_FileSystem::File_t MetricGroupCConfig_File_t;
-        MetricGroupCConfig_File_t.parameters.filename = MetricGroupCConfig_n;
-        MetricGroupCConfig_File_t.parameters.length_bytes = sizeof(DataConfig::parameters);
-
-        #if BOARD == EARHART_V1_0_0
-            status = DataManager::add_file(MetricGroupCConfig_File_t, 1200/METRIC_GROUPS_ON);
-        #endif /* #if BOARD == EARHART_V1_0_0 */
-        #if BOARD == WRIGHT_V1_0_0 
-            status = DataManager::add_file(MetricGroupCConfig_File_t,3000);
-        #endif
-        if(status != NODEFLOW_OK)
-        {
-            debug("\r\nMetricGroupCConfig_File_t");
-            return status;
-        }
-
-    #endif /* #if (SCHEDULER_C || METRIC_GROUPS_ON==3) */
-
-    #if (SCHEDULER_D|| METRIC_GROUPS_ON==4)
-        DataManager_FileSystem::File_t MetricGroupDConfig_File_t;
-        MetricGroupDConfig_File_t.parameters.filename = MetricGroupDConfig_n;
-        MetricGroupDConfig_File_t.parameters.length_bytes = sizeof(DataConfig::parameters);
-
-        #if BOARD == EARHART_V1_0_0
-            status = DataManager::add_file(MetricGroupDConfig_File_t, 1200/METRIC_GROUPS_ON);
-        #endif /* #if BOARD == EARHART_V1_0_0 */
-        #if BOARD == WRIGHT_V1_0_0 
-            status = DataManager::add_file(MetricGroupDConfig_File_t,3000);
-        #endif
-        if(status != NODEFLOW_OK)
-        {
-            debug("\r\nMetricGroupDConfig_File_t");
-            return status;
-        }
-    #endif /* #if (SCHEDULER_B || METRIC_GROUPS_ON=42) */
-    
-   
-    DataManager_FileSystem::File_t MetricGroupEntriesConfig_File_t;
-    MetricGroupEntriesConfig_File_t.parameters.filename = MetricGroupEntriesConfig_n;
-    MetricGroupEntriesConfig_File_t.parameters.length_bytes = sizeof(MetricGroupEntriesConfig::parameters);
-
-    status = DataManager::add_file(MetricGroupEntriesConfig_File_t, 1); 
-    if(status != NODEFLOW_OK)
-    {
-        return status;
-    }
-
-    clear_mg_counter();
     return status;
 }
 
-//todo:
-int NodeFlow::create_file(uint8_t filename, int length)
-{
-    // filenames_len;
-    // debug("\r\nFiles: %d\r\n",filenames_len);
-    DataManager_FileSystem::File_t DataConfig_File_t;
-    DataConfig_File_t.parameters.filename = filename; 
-    DataConfig_File_t.parameters.length_bytes = sizeof(DataConfig::parameters);
+#if BOARD == EARHART_V1_0_0 || BOARD == DEVELOPMENT_BOARD_V1_1_0 /* #endif at EoF */
 
-    status = DataManager::add_file(DataConfig_File_t, length); 
+void NodeFlow::getDevAddr()
+{
+    DeviceConfig dev_conf;
+    status = DataManager::read_file_entry(DeviceConfig_n, 0, dev_conf.data, sizeof(dev_conf.parameters));
+
+    #if(OVER_THE_AIR_ACTIVATION)
+        debug("\r\n");
+    for (int i=0; i<8; i++)
+    {
+        debug("%02x",dev_conf.parameters.device_eui[i]);
+    }
+    debug("\r\n");
+    for (int i=0; i<8; i++)
+    {
+        debug("%02x",dev_conf.parameters.application_eui[i]);
+    }
+    debug("\r\n");
+    for (int i=0; i<16; i++)
+    {
+        debug("%02x",dev_conf.parameters.application_key[i]);
+    }
+    #endif
+
+    #if(!OVER_THE_AIR_ACTIVATION)
+        debug("\r\nDevaddr %08x\r\n",dev_conf.parameters.device_address);
+        for (int i=0; i<16; i++)
+        {
+            debug("%02x",dev_conf.parameters.net_session_key[i]);
+        }
+        debug("\r\n");
+        for (int i=0; i<16; i++)
+        {
+            debug("%02x",dev_conf.parameters.app_session_key[i]);
+        }
+    #endif
+}
+#endif
+
+#if BOARD == WRIGHT_V1_0_0
+int NodeFlow::initialise_nbiot()
+{
+    if(_comms_stack == Comms_Radio_Stack::NBIOT)
+    {
+        status=_radio.ready();
+        if (status != NodeFlow::NODEFLOW_OK)
+        {
+            return status;
+        }
+        char ipv4[] = "68.183.254.233";
+        uint16_t port= 5683;
+        char uri[] = "coap://68.183.254.233:5683/";
+        uint8_t uri_length=27;
+        status=_radio.configure_coap(ipv4, port, uri, uri_length);
+        if(status != NodeFlow::NODEFLOW_OK)
+        {
+            debug("\nCoap server not configured %d\r\n",status); //todo: if not configured then??
+            return status;
+        }
+        _radio.start(5);
+    }
+    return NODEFLOW_OK;      
+}
+#endif /* #if BOARD == WRIGHT_V1_0_0 */
+
+
+// //todo:
+
+// std::map<std::string,func_type> fm;
+int NodeFlow::CreateFile(DataManager_FileSystem::File_t file, uint8_t filename, int struct_size, int length)
+{
+
+    //DataManager_FileSystem::File_t DataConfig_File_t;
+    file.parameters.filename = filename; 
+    file.parameters.length_bytes = struct_size;//  sizeof(DataConfig::parameters);
+
+    status = DataManager::add_file(file, length); 
     if(status != NODEFLOW_OK)
     {
         return status;
@@ -683,33 +743,24 @@ int NodeFlow::create_file(uint8_t filename, int length)
 }
 
 template <typename DataType> 
-void NodeFlow::add_record(DataType data, string str1)
+void NodeFlow::add_record(DataType data, string str)
 {   
-    #if(SEND_SCHEDULER)
-        //tformatter.write_string(str1);
-        tformatter.write_num_type<DataType>(data);
-    #endif /* #if(SEND_SCHEDULER) */
-
-    #if(!SEND_SCHEDULER)
-        tformatter.increase_entries();
-        uint8_t bytes[sizeof(DataType)];
-        *(DataType *)(bytes)=data;
-        for (int i=sizeof(DataType); i>0; i--)
-        {
-            add_sensing_entry(bytes[i-1],1);
-        }
-    #endif /* #if(!SEND_SCHEDULER) */
+    if (!str.empty()) //size() == 0
+    {
+        tformatter.write_string(str);
+    }
+    tformatter.write_num_type<DataType>(data);
 }
-template void NodeFlow::add_record<int8_t>(int8_t data, string str1);
-template void NodeFlow::add_record<int16_t>(int16_t data, string str1);
-template void NodeFlow::add_record<int32_t>(int32_t data, string str1);
-template void NodeFlow::add_record<int64_t>(int64_t data, string str1);
-template void NodeFlow::add_record<uint8_t>(uint8_t data, string str1);
-template void NodeFlow::add_record<uint16_t>(uint16_t data, string str1);
-template void NodeFlow::add_record<uint32_t>(uint32_t data, string str1);
-template void NodeFlow::add_record<uint64_t>(uint64_t data, string str1);
-template void NodeFlow::add_record<float>(float data, string str1);
-template void NodeFlow::add_record<double>(double data, string str1);
+template void NodeFlow::add_record<int8_t>(int8_t data, string str);
+template void NodeFlow::add_record<int16_t>(int16_t data, string str);
+template void NodeFlow::add_record<int32_t>(int32_t data, string str);
+template void NodeFlow::add_record<int64_t>(int64_t data, string str);
+template void NodeFlow::add_record<uint8_t>(uint8_t data, string str);
+template void NodeFlow::add_record<uint16_t>(uint16_t data, string str);
+template void NodeFlow::add_record<uint32_t>(uint32_t data, string str);
+template void NodeFlow::add_record<uint64_t>(uint64_t data, string str);
+template void NodeFlow::add_record<float>(float data, string str);
+template void NodeFlow::add_record<double>(double data, string str);
 
 int NodeFlow::add_payload_data(uint8_t metric_group_flag) 
 {
@@ -722,84 +773,62 @@ int NodeFlow::add_payload_data(uint8_t metric_group_flag)
         tformatter.get_serialised(buffer, buffer_len);
         for (int i=0; i<buffer_len; i++)
         {
-            add_sensing_entry(buffer[i],metric_group_flag);
+            status=add_sensing_entry(buffer[i],metric_group_flag);
+            if(status!=NODEFLOW_OK)
+            {
+                return status;
+            }
         } 
-    }
-    else
-    {
-        debug("\r\nNo new entries from this group");
     }
     return NODEFLOW_OK;
 }
 
 int NodeFlow::add_sensing_entry(uint8_t value, uint8_t metric_group)
 {
+    uint8_t filename=0;
     if(metric_group==0)
-    {       
+    {  
         #if(INTERRUPT_ON)
-            DataConfig t_conf;
-            t_conf.parameters.byte=value;
-            status= DataManager::append_file_entry(InterruptConfig_n, t_conf.data, sizeof(t_conf.parameters));
-            if(status != NODEFLOW_OK)
-            {
-                debug("Error.Line %d, Status: %d",__LINE__, status);
-            }
+        filename=InterruptConfig_n;
         #endif
     }
     
     if(metric_group==1)
     {
-        DataConfig t_conf;
-        t_conf.parameters.byte=value;
-        status= DataManager::append_file_entry(MetricGroupAConfig_n, t_conf.data, sizeof(t_conf.parameters));
-        if(status != NODEFLOW_OK)
-        {
-            debug("Error.Line %d, Status: %d",__LINE__, status);
-        }
+        filename=MetricGroupAConfig_n; 
     }
     
     if(metric_group==2)
     {    
-        #if (SCHEDULER_B || METRIC_GROUPS_ON==4 || METRIC_GROUPS_ON==3 || METRIC_GROUPS_ON==2) 
-            DataConfig t_conf;
-            t_conf.parameters.byte=value;
-            status= DataManager::append_file_entry(MetricGroupBConfig_n, t_conf.data, sizeof(t_conf.parameters));
-            if(status != NODEFLOW_OK)
-            {
-                debug("Error.Line %d, Status: %d",__LINE__, status);
-            }
+        #if (SCHEDULER_B || METRIC_GROUPS_ON==4 || METRIC_GROUPS_ON==3 || METRIC_GROUPS_ON==2)
+        filename=MetricGroupBConfig_n;
         #endif
     }
     if(metric_group==3)
     {
         #if (SCHEDULER_C  || METRIC_GROUPS_ON==4 || METRIC_GROUPS_ON==3)
-            DataConfig t_conf;
-            t_conf.parameters.byte=value;
-            status= DataManager::append_file_entry(MetricGroupCConfig_n, t_conf.data, sizeof(t_conf.parameters));
-            if(status != NODEFLOW_OK)
-            {
-                debug("Error.Line %d, Status: %d",__LINE__, status);
-            }
+        filename=MetricGroupCConfig_n;
         #endif
     }
     if(metric_group==4)
     {   
         #if (SCHEDULER_D || METRIC_GROUPS_ON==4)
-        DataConfig t_conf;
-        t_conf.parameters.byte=value;
-        status= DataManager::append_file_entry(MetricGroupDConfig_n, t_conf.data, sizeof(t_conf.parameters));
-        if(status != NODEFLOW_OK)
-        {
-            debug("Error.Line %d, Status: %d",__LINE__, status);
-        }
+        filename=MetricGroupDConfig_n;
         #endif
     }
-    if(status != NODEFLOW_OK)
+    if (filename != 0)
     {
-        ErrorHandler(__LINE__,"MetricGroupsConfig",status,__PRETTY_FUNCTION__);
+        DataConfig t_conf;
+        t_conf.parameters.byte=value;
+        status= DataManager::append_file_entry(filename, t_conf.data, sizeof(t_conf.parameters));
+        if(status != NODEFLOW_OK)
+        {
+            ErrorHandler(__LINE__,"MetricGroupsConfig",status,__PRETTY_FUNCTION__);
+            return status;
+        }
     }
-    return status;
     
+    return NODEFLOW_OK;
 }
 
 /** Increment A is erased after reading the value (have to be stored immediately)
@@ -815,18 +844,15 @@ uint16_t NodeFlow::read_inc_a()
     {
         ErrorHandler(__LINE__,"IncrementAConfig",status,__PRETTY_FUNCTION__);   
     }
-   // increment_value=i_conf.parameters.increment;
-    if (status == NODEFLOW_OK)
+    uint16_t increment_value=i_conf.parameters.increment;
+i_conf.parameters.increment=0;
+    status= DataManager::overwrite_file_entries(IncrementAConfig_n, i_conf.data, sizeof(i_conf.parameters));
+    if (status != NODEFLOW_OK)
     {
-        i_conf.parameters.increment=0;
-        status= DataManager::overwrite_file_entries(IncrementAConfig_n, i_conf.data, sizeof(i_conf.parameters));
-        if (status!=NODEFLOW_OK)
-        {
-            ErrorHandler(__LINE__,"IncrementAConfig",status,__PRETTY_FUNCTION__);   
-        }
+        ErrorHandler(__LINE__,"IncrementAConfig",status,__PRETTY_FUNCTION__);   
     }
     
-    return i_conf.parameters.increment;
+    return increment_value;
 }
 
 int NodeFlow::inc_a(int i)
@@ -840,7 +866,7 @@ int NodeFlow::inc_a(int i)
    
     i_conf.parameters.increment=i+i_conf.parameters.increment;
     status= DataManager::overwrite_file_entries(IncrementAConfig_n, i_conf.data, sizeof(i_conf.parameters));
-    if (status!=NODEFLOW_OK)
+    if (status != NODEFLOW_OK)
     {
         ErrorHandler(__LINE__,"IncrementAConfig",status,__PRETTY_FUNCTION__); 
     }
@@ -856,7 +882,7 @@ int NodeFlow::read_inc_b(uint16_t& increment_value)
     {
         ErrorHandler(__LINE__,"IncrementBConfig",status,__PRETTY_FUNCTION__);   
     }
-    increment_value=i_conf.parameters.increment;
+    increment_value = i_conf.parameters.increment;
 
     return status;
 }
@@ -865,8 +891,8 @@ int NodeFlow::clear_inc_b()
 {
     IncrementBConfig i_conf;
     i_conf.parameters.increment=0;
-    status= DataManager::overwrite_file_entries(IncrementBConfig_n, i_conf.data, sizeof(i_conf.parameters));
-    if (status!=NODEFLOW_OK)
+    status = DataManager::overwrite_file_entries(IncrementBConfig_n, i_conf.data, sizeof(i_conf.parameters));
+    if (status != NODEFLOW_OK)
     {
         ErrorHandler(__LINE__,"IncrementAConfig",status,__PRETTY_FUNCTION__);   
     }
@@ -884,8 +910,8 @@ int NodeFlow::inc_b(int i)
     }
 
     i_conf.parameters.increment=i+i_conf.parameters.increment;
-    status= DataManager::overwrite_file_entries(IncrementBConfig_n, i_conf.data, sizeof(i_conf.parameters));
-    if (status!=NODEFLOW_OK)
+    status = DataManager::overwrite_file_entries(IncrementBConfig_n, i_conf.data, sizeof(i_conf.parameters));
+    if (status != NODEFLOW_OK)
     {
         ErrorHandler(__LINE__,"IncrementBConfig",status,__PRETTY_FUNCTION__); 
     }
@@ -912,9 +938,9 @@ int NodeFlow::inc_c(int i)
     if (status == NODEFLOW_OK)
     {
         IncrementCConfig i_conf;
-        i_conf.parameters.increment=i+increment_value;
-        status= DataManager::overwrite_file_entries(IncrementCConfig_n, i_conf.data, sizeof(i_conf.parameters));
-        if (status!=NODEFLOW_OK)
+        i_conf.parameters.increment = i+increment_value;
+        status = DataManager::overwrite_file_entries(IncrementCConfig_n, i_conf.data, sizeof(i_conf.parameters));
+        if (status != NODEFLOW_OK)
         {
             ErrorHandler(__LINE__,"IncrementCConfig",status,__PRETTY_FUNCTION__); 
         }
@@ -923,80 +949,127 @@ int NodeFlow::inc_c(int i)
 }
 
 
-int NodeFlow::read_mg_counter(uint16_t& mga_entries, uint16_t& mgb_entries,uint16_t& mgc_entries, uint16_t& mgd_entries, uint8_t& metric_group_active)
+int NodeFlow::read_mg_entries_counter(uint16_t& mga_entries, uint16_t& mgb_entries,uint16_t& mgc_entries, uint16_t& mgd_entries, uint16_t& interrupt_entries,uint8_t& metric_group_active)
 {   
-    metric_group_active=0;
+    metric_group_active = 0;
     MetricGroupEntriesConfig i_conf;
     status = DataManager::read_file_entry(MetricGroupEntriesConfig_n, 0, i_conf.data, sizeof(i_conf.parameters));
+    
+    interrupt_entries=i_conf.parameters.InterruptEntries;
+    if (interrupt_entries != 0)
+    {
+        metric_group_active++;
+    }
+
     mga_entries= i_conf.parameters.MetricGroupAEntries;
-    if (mga_entries!=0)
+    if (mga_entries != 0)
     {
         metric_group_active++;
     }
-    mgb_entries= i_conf.parameters.MetricGroupBEntries;
-    if (mgb_entries!=0)
+    mgb_entries = i_conf.parameters.MetricGroupBEntries;
+    if (mgb_entries != 0)
     {
         metric_group_active++;
     }
-    mgc_entries= i_conf.parameters.MetricGroupCEntries;
+    mgc_entries = i_conf.parameters.MetricGroupCEntries;
     if (mgc_entries!=0)
     {
         metric_group_active++;
     }
-    mgd_entries= i_conf.parameters.MetricGroupDEntries;
-    if (mgd_entries!=0)
+    mgd_entries = i_conf.parameters.MetricGroupDEntries;
+    if (mgd_entries != 0)
     {
         metric_group_active++;
     }
-    if (status!=NODEFLOW_OK)
+    if (status != NODEFLOW_OK)
     {
         ErrorHandler(__LINE__,"MetricGroupEntriesConfig_n",status,__PRETTY_FUNCTION__); 
     }
     return NODEFLOW_OK;
 }
 
-int NodeFlow::read_interrupt_counter(uint16_t& interrupt_entries)
+
+void NodeFlow::is_overflow()
 {
+    
+    int max_mga_bytes, max_mgb_bytes, max_mgc_bytes, max_mgd_bytes, max_interrupt_bytes;
+    int mga_bytes, mgb_bytes, mgc_bytes, mgd_bytes, interrupt_bytes;
+    read_mg_bytes(mga_bytes, mgb_bytes, mgc_bytes, mgd_bytes, interrupt_bytes);
+   
     MetricGroupEntriesConfig i_conf;
     status = DataManager::read_file_entry(MetricGroupEntriesConfig_n, 0, i_conf.data, sizeof(i_conf.parameters));
-    if (status!=NODEFLOW_OK)
-    {
-        ErrorHandler(__LINE__,"MetricGroupEntriesConfig_n",status,__PRETTY_FUNCTION__);
-    }
-    interrupt_entries= i_conf.parameters.InterruptEntries;
-   
-    return NODEFLOW_OK;
-}
-
-bool NodeFlow::is_overflow()
-{
-    int mga_bytes, mgb_bytes, mgc_bytes, mgd_bytes, interrupt_bytes;
-    uint16_t mga_entries, mgb_entries, mgc_entries, mgd_entries, interrupt_entries;
-    uint8_t metric_group_active;
-    read_mg_bytes(mga_bytes, mgb_bytes, mgc_bytes, mgd_bytes, interrupt_bytes);
-    read_mg_counter(mga_entries, mgb_entries, mgc_entries, mgd_entries, metric_group_active);
-    read_interrupt_counter(interrupt_entries);
-
-    uint16_t total_bytes=mga_bytes+ mgb_bytes+ mgc_bytes+ mgd_bytes + interrupt_bytes;
-    uint16_t total_entries=mga_entries + mgb_entries + mgc_entries + mgd_entries + interrupt_entries;
-
-    debug("\r\nENTRIES = MGA: %d, MGB: %d, MGC: %d, MGD: %d, MGI: %d\r\n",mga_entries, mgb_entries, mgc_entries, mgd_entries,interrupt_entries);
-    debug("\r\nBYTES = MGA: %d, MGB: %d, MGC: %d, MGD: %d, MGI: %d\r\n",mga_bytes, mgb_bytes, mgc_bytes, mgd_bytes, interrupt_bytes);
-
-    #if BOARD == EARHART_V1_0_0
-        if((total_bytes+(total_bytes/total_entries)+53)> 800)
-        {
-            debug("\r\nIN THE NEXT ENTRY THE MEMORY WILL BE FULL- SENT DATA NOW");
-            return true;
-        }
+    #if(INTERRUPT_ON)
+    uint16_t b=METRIC_GROUPS_ON+1;
     #endif
-
-    if(total_bytes+(total_bytes/total_entries)+53>3800) 
+    #if(!INTERRUPT_ON)
+    uint16_t b=METRIC_GROUPS_ON;
+    #endif
+    b=14000/b;
+    max_mga_bytes=(mga_bytes/i_conf.parameters.MetricGroupAEntries)*2+mga_bytes;
+    max_mgb_bytes=(mgb_bytes/i_conf.parameters.MetricGroupBEntries)*2+mgb_bytes;
+    max_mgc_bytes=(mgc_bytes/i_conf.parameters.MetricGroupCEntries)*2+mgc_bytes;
+    max_mgd_bytes=(mgd_bytes/i_conf.parameters.MetricGroupDEntries)*2+mgd_bytes;
+    max_interrupt_bytes=(interrupt_bytes/i_conf.parameters.InterruptEntries)*2+interrupt_bytes;
+    
+    if(max_mga_bytes > b || max_mgb_bytes > b || max_mgc_bytes > b || max_mgd_bytes > b || max_interrupt_bytes > b)
     {
-        debug("\r\nIN THE NEXT ENTRY THE MEMORY WILL BE FULL- SENT DATA NOW");
-        return true;
+        debug("\r\nMEMORYY FULL");
+        status=_send();
+        if(status<NODEFLOW_OK)
+        {
+            #if(INTERRUPT_ON)
+            if(max_interrupt_bytes > b )
+            {
+                status=DataManager::truncate_file(InterruptConfig_n, (mga_bytes/i_conf.parameters.InterruptEntries)*(int(i_conf.parameters.MetricGroupAEntries*0.2)));
+                if(status==NodeFlow::NODEFLOW_OK)
+                {
+                    i_conf.parameters.InterruptEntries=i_conf.parameters.InterruptEntries-int(i_conf.parameters.MetricGroupAEntries*0.2); 
+                }
+            }
+            #endif
+
+            if(max_mga_bytes > b )
+            {
+                status=DataManager::truncate_file(MetricGroupAConfig_n, (mga_bytes/i_conf.parameters.MetricGroupAEntries)*(int(i_conf.parameters.MetricGroupAEntries*0.2)));
+                if(status==NodeFlow::NODEFLOW_OK)
+                {
+                    i_conf.parameters.MetricGroupAEntries=i_conf.parameters.MetricGroupAEntries-(int(i_conf.parameters.MetricGroupAEntries*0.2));
+                }
+            }
+            if(max_mgb_bytes > b)
+            {
+                status=DataManager::truncate_file(MetricGroupBConfig_n, (mgb_bytes/i_conf.parameters.MetricGroupBEntries)*(int(i_conf.parameters.MetricGroupAEntries*0.2)));
+                if(status==NodeFlow::NODEFLOW_OK)
+                {
+                    i_conf.parameters.MetricGroupBEntries=i_conf.parameters.MetricGroupBEntries-(int(i_conf.parameters.MetricGroupAEntries*0.2));
+                }
+            }
+
+            if(max_mgc_bytes > b )
+            {
+                status=DataManager::truncate_file(MetricGroupCConfig_n, (mgc_bytes/i_conf.parameters.MetricGroupCEntries)*(int(i_conf.parameters.MetricGroupAEntries*0.2)));
+                if(status==NodeFlow::NODEFLOW_OK)
+                {
+                    i_conf.parameters.MetricGroupCEntries=i_conf.parameters.MetricGroupCEntries-(int(i_conf.parameters.MetricGroupAEntries*0.2));
+                }
+            }
+
+            if(max_mgd_bytes > b )
+            {
+                status=DataManager::truncate_file(MetricGroupDConfig_n, (mgd_bytes/i_conf.parameters.MetricGroupDEntries)*(int(i_conf.parameters.MetricGroupAEntries*0.2)));
+                if(status==NodeFlow::NODEFLOW_OK)
+                {
+                    i_conf.parameters.MetricGroupDEntries=i_conf.parameters.MetricGroupDEntries-(int(i_conf.parameters.MetricGroupAEntries*0.2));
+                }
+            }
+
+            status= DataManager::overwrite_file_entries(MetricGroupEntriesConfig_n, i_conf.data, sizeof(i_conf.parameters));
+            if (status!=NODEFLOW_OK)
+            {
+                ErrorHandler(__LINE__,"MetricGroupEntriesConfig_n",status,__PRETTY_FUNCTION__); 
+            }
+       }
     }
-    return false;
 }
 
 int NodeFlow::read_mg_bytes(int& mga_bytes, int& mgb_bytes, int& mgc_bytes,int& mgd_bytes, int& interrupt_bytes)
@@ -1049,7 +1122,7 @@ int NodeFlow::read_mg_bytes(int& mga_bytes, int& mgb_bytes, int& mgc_bytes,int& 
 
 } 
 
-int NodeFlow::mg_counter(uint8_t mg_flag) 
+int NodeFlow::increase_mg_entries_counter(uint8_t mg_flag) 
 {
     MetricGroupEntriesConfig i_conf;
     status = DataManager::read_file_entry(MetricGroupEntriesConfig_n, 0, i_conf.data, sizeof(i_conf.parameters));
@@ -1120,7 +1193,7 @@ int NodeFlow::metric_config_init(int length)
 {
     DataManager_FileSystem::File_t MetricGroupTimesConfig_File_t;
     MetricGroupTimesConfig_File_t.parameters.filename = MetricGroupTimesConfig_n;
-    MetricGroupTimesConfig_File_t.parameters.length_bytes = sizeof(MetricGroupTimesConfig::parameters);
+    MetricGroupTimesConfig_File_t.parameters.length_bytes = sizeof(TimeConfig::parameters);
 
     status=DataManager::add_file(MetricGroupTimesConfig_File_t, length);
     if (status != NODEFLOW_OK) 
@@ -1131,7 +1204,7 @@ int NodeFlow::metric_config_init(int length)
     
     DataManager_FileSystem::File_t TempMetricGroupTimesConfig_File_t;
     TempMetricGroupTimesConfig_File_t.parameters.filename = TempMetricGroupTimesConfig_n;
-    TempMetricGroupTimesConfig_File_t.parameters.length_bytes = sizeof(MetricGroupTimesConfig::parameters);
+    TempMetricGroupTimesConfig_File_t.parameters.length_bytes = sizeof(TimeConfig::parameters);
 
     status = DataManager::add_file(TempMetricGroupTimesConfig_File_t, length);
     if(status!=NODEFLOW_OK)
@@ -1143,27 +1216,6 @@ int NodeFlow::metric_config_init(int length)
     return status;   
 }
 
-
-/** Initialise the time config file
- *
- *  @return Status
- */
-int NodeFlow::time_config_init()
-{
-    DataManager_FileSystem::File_t TimeConfig_File_t;
-    TimeConfig_File_t.parameters.filename = TimeConfig_n;
-    TimeConfig_File_t.parameters.length_bytes = sizeof(TimeConfig::parameters);
-    status = DataManager::add_file(TimeConfig_File_t, 1);
-    if(status != NODEFLOW_OK)
-    {
-        ErrorHandler(__LINE__,"TimeConfig",status,__PRETTY_FUNCTION__);  
-        return status;
-    }
-    
-    status = set_time_config(0);
-    
-    return status;
-}
 
 int NodeFlow::set_time_config(int time_comparator)
 {
@@ -1253,7 +1305,6 @@ int NodeFlow::init_sched_config()
         #endif
     }
 
-    time_config_init();
     #if (METRIC_GROUPS_ON != 0)
         if(!schedulerOn)
         {
@@ -1389,7 +1440,7 @@ return status;
 
 int NodeFlow::overwrite_send_sched_config(uint16_t code,uint16_t length)
 {
-    SendSchedulerConfig ss_conf;
+    TimeConfig ss_conf;
     ss_conf.parameters.time_comparator=code;
 
     status= DataManager::overwrite_file_entries(SendSchedulerConfig_n, ss_conf.data, sizeof(ss_conf.parameters));
@@ -1414,7 +1465,7 @@ int NodeFlow::overwrite_send_sched_config(uint16_t code,uint16_t length)
 
 int NodeFlow::append_send_sched_config(uint16_t time_comparator)
 {
-    SendSchedulerConfig ss_conf;
+    TimeConfig ss_conf;
     ss_conf.parameters.time_comparator=time_comparator;
 
     status= DataManager::append_file_entry(SendSchedulerConfig_n, ss_conf.data, sizeof(ss_conf.parameters));
@@ -1428,7 +1479,7 @@ int NodeFlow::append_send_sched_config(uint16_t time_comparator)
 
 int NodeFlow::read_send_sched_config(int i, uint16_t& time)
 {
-    SendSchedulerConfig ss_conf;
+    TimeConfig ss_conf;
     status = DataManager::read_file_entry(SendSchedulerConfig_n, i, ss_conf.data, sizeof(ss_conf.parameters));
     if(status != NODEFLOW_OK)
     {
@@ -1440,12 +1491,12 @@ int NodeFlow::read_send_sched_config(int i, uint16_t& time)
     return status;
 }
 
-//change so the user will choose
+
 int NodeFlow::overwrite_clock_synch_config(int time_comparator, bool clockSynchOn)
 {
-    ClockSynchFlag c_conf;
-    c_conf.parameters.clockSynchOn=clockSynchOn;
-    c_conf.parameters.time_comparator=time_comparator;
+    FlagsConfig c_conf;
+    c_conf.parameters.flag=clockSynchOn;
+    c_conf.parameters.value=time_comparator;
     
     status = DataManager::overwrite_file_entries(ClockSynchFlag_n, c_conf.data, sizeof(c_conf.parameters));
     int count=0;
@@ -1461,7 +1512,7 @@ int NodeFlow::overwrite_clock_synch_config(int time_comparator, bool clockSynchO
 
 int NodeFlow::read_clock_synch_config(uint16_t& time, bool &clockSynchOn)
 {
-    ClockSynchFlag c_conf;
+    FlagsConfig c_conf;
     status = DataManager::read_file_entry(ClockSynchFlag_n, 0, c_conf.data, sizeof(c_conf.parameters));
     if (status != NODEFLOW_OK)
     {
@@ -1469,8 +1520,8 @@ int NodeFlow::read_clock_synch_config(uint16_t& time, bool &clockSynchOn)
         return status;
     }
     
-    clockSynchOn=c_conf.parameters.clockSynchOn;
-    time=c_conf.parameters.time_comparator;
+    clockSynchOn=c_conf.parameters.flag;
+    time=c_conf.parameters.value;
 
     return status;
 }
@@ -1543,7 +1594,7 @@ void NodeFlow::add_metric_groups()
     uint16_t sch_length;
     read_sched_config(1,sch_length);
     metric_config_init(sch_length);
-    MetricGroupTimesConfig sg_conf;
+    TimeConfig sg_conf;
     for (int i=0; i<sch_length; i++)
     {
         sg_conf.parameters.time_comparator=scheduler[i];
@@ -1651,8 +1702,6 @@ void NodeFlow::set_scheduler(int latency, uint32_t& next_timediff)
                     overwrite_metric_flags(group_id);
                 }
             }
-            // debug("\r\nNext Sensing ");
-            // timetodate(next_sch_time);
         }
         else if(!schedulerOn)
         {
@@ -1691,10 +1740,7 @@ void NodeFlow::set_scheduler(int latency, uint32_t& next_timediff)
                 next_sch_time=scheduled_times;
             }  
         }
-        
-        // debug("\r\nNext Sending ");
-        // timetodate(next_sch_time);
-        
+         
         if(timediff_temp_send<=timediff_temp)
         {
             ssck_flag.set(1);
@@ -1714,8 +1760,6 @@ void NodeFlow::set_scheduler(int latency, uint32_t& next_timediff)
 
     if(clockSynchOn)
     {
-        // debug("\r\nNext ClkSync ");
-        // timetodate(2*time);
         if(cs_time < 0)
         {
             cs_time=cs_time+DAYINSEC;
@@ -1766,7 +1810,7 @@ void NodeFlow::set_scheduler(int latency, uint32_t& next_timediff)
 
 int NodeFlow::set_reading_time(uint32_t& time)
 { 
-    MetricGroupTimesConfig sg_conf;
+    //TimeConfig sg_conf;
     TimeConfig t_conf;
     uint16_t sch_length;
     read_sched_config(1,sch_length);
@@ -1783,22 +1827,22 @@ int NodeFlow::set_reading_time(uint32_t& time)
 
     time_comparator=t_conf.parameters.time_comparator; 
     
-    status = DataManager::read_file_entry(TempMetricGroupTimesConfig_n, 0, sg_conf.data, sizeof(sg_conf.parameters));
+    status = DataManager::read_file_entry(TempMetricGroupTimesConfig_n, 0, t_conf.data, sizeof(t_conf.parameters));
     if(status != NODEFLOW_OK)
     {
         ErrorHandler(__LINE__,"TempMetricGroupTimesConfig_n",status,__PRETTY_FUNCTION__);
     }
 
-    int temp=sg_conf.parameters.time_comparator; 
+    int temp=t_conf.parameters.time_comparator; 
 
     for (int i=0; i<sch_length; i++)
     {
-        status=DataManager::read_file_entry(TempMetricGroupTimesConfig_n, i, sg_conf.data, sizeof(sg_conf.parameters));
+        status=DataManager::read_file_entry(TempMetricGroupTimesConfig_n, i, t_conf.data, sizeof(t_conf.parameters));
         if(status != NODEFLOW_OK)
         {
             ErrorHandler(__LINE__,"TempMetricGroupTimesConfig_n",status,__PRETTY_FUNCTION__);
         }
-        int time_comparator_now= sg_conf.parameters.time_comparator;
+        int time_comparator_now= t_conf.parameters.time_comparator;
 
         if (temp >= time_comparator_now && time_comparator_now != 0)
         {
@@ -1816,10 +1860,6 @@ int NodeFlow::set_reading_time(uint32_t& time)
 
     time_comparator=temp;
     overwrite_metric_flags(int(flags.to_ulong()));
-    // #if (NODEFLOW_DBG)
-    //     debug("\r\nNext Reading ");
-    //     timetodate(time_comparator+time_now());
-    // #endif
     debug("\r\nGroupA: %d, GroupB: %d, GroupC: %d, GroupD: %d", flags.test(0), flags.test(1), flags.test(2), flags.test(3));
     time=time_comparator;
 
@@ -1827,7 +1867,7 @@ int NodeFlow::set_reading_time(uint32_t& time)
 }
 int NodeFlow::set_temp_reading_times(uint32_t time)
 {
-    MetricGroupTimesConfig sg_conf;
+    TimeConfig sg_conf;
     uint16_t sch_length;
     read_sched_config(1,sch_length);
     uint32_t temp_time[sch_length];
@@ -1870,10 +1910,7 @@ int NodeFlow::set_temp_reading_times(uint32_t time)
 
     for(int i=0; i<sch_length; i++)
     {
-        
-        debug("\r\n%d. Metric group id: %i, next wakeup: %u seconds",i,i,temp_time[i]);
         sg_conf.parameters.time_comparator=temp_time[i];
-
         if(i == 0)
         {
             status=DataManager::overwrite_file_entries(TempMetricGroupTimesConfig_n, sg_conf.data, sizeof(sg_conf.parameters)); 
@@ -1893,7 +1930,6 @@ int NodeFlow::set_temp_reading_times(uint32_t time)
             }
         }
     }
-    debug("\r\n");
    return status;
 }
 int NodeFlow::overwrite_metric_flags(uint8_t ssck_flag)
@@ -1903,7 +1939,7 @@ int NodeFlow::overwrite_metric_flags(uint8_t ssck_flag)
     status=DataManager::overwrite_file_entries(MetricGroupConfig_n, mg_conf.data, sizeof(mg_conf.parameters));
     if(status != NODEFLOW_OK)
     {   
-        ErrorHandler(__LINE__,"MetricGroupConfig",status,__PRETTY_FUNCTION__);
+        ErrorHandler(__LINE__,"MetricGroupConfig_n",status,__PRETTY_FUNCTION__);
     }
     return status;
 }
@@ -1914,19 +1950,22 @@ int NodeFlow::get_metric_flags(uint8_t &flag)
     status=DataManager::read_file_entry(MetricGroupConfig_n, 0, mg_conf.data, sizeof(mg_conf.parameters));
     if (status!=NODEFLOW_OK)
     {
-        ErrorHandler(__LINE__,"MetricGroupConfig",status,__PRETTY_FUNCTION__);
+        ErrorHandler(__LINE__,"MetricGroupConfig_n",status,__PRETTY_FUNCTION__);
         return status;
     } 
     flag=mg_conf.parameters.metric_group_id;
     return status;
 }
+
+
+
 int NodeFlow::get_interrupt_latency(uint32_t &next_sch_time)
 {
-    NextTimeConfig t_conf;
+    TimeConfig t_conf;
     status=DataManager::read_file_entry(NextTimeConfig_n, 0, t_conf.data,sizeof(t_conf.parameters));
     if (status != NODEFLOW_OK)
     {
-        ErrorHandler(__LINE__,"NextTimeConfig",status,__PRETTY_FUNCTION__);
+        ErrorHandler(__LINE__,"NextTimeConfig_n",status,__PRETTY_FUNCTION__);
         return status;
     }
     next_sch_time=t_conf.parameters.time_comparator-time_now();
@@ -1935,7 +1974,7 @@ int NodeFlow::get_interrupt_latency(uint32_t &next_sch_time)
 
 int NodeFlow::overwrite_wakeup_timestamp(uint16_t time_remainder){
     
-    NextTimeConfig t_conf;
+    TimeConfig t_conf;
     t_conf.parameters.time_comparator=time_now()+time_remainder;
     status=DataManager::overwrite_file_entries( NextTimeConfig_n, t_conf.data, sizeof(t_conf.parameters));
     if (status != NODEFLOW_OK)
@@ -1964,7 +2003,7 @@ int NodeFlow::get_timestamp()
 
     if (unix_time>time(NULL))
     {
-        debug("\r\nReceived value: %d\n",unix_time);
+        //debug("\r\nReceived value: %d\n",unix_time);
         set_time(unix_time);
     }
     return NODEFLOW_OK;   
@@ -1986,9 +2025,7 @@ void NodeFlow::_sense()
         uint8_t mg_flag;
         get_metric_flags(mg_flag);
         bitset<8> metric_flag(mg_flag);
-        #if(!SEND_SCHEDULER)
-            add_sensing_entry(mg_flag,1);
-        #endif /* #if(!SEND_SCHEDULER) */
+    
         debug("\r\nMGroupA: %d, MGroupB: %d, MGroupC: %d, MGroupC: %d",metric_flag.test(0),
                 metric_flag.test(1),metric_flag.test(2),metric_flag.test(3));
        
@@ -1999,11 +2036,9 @@ void NodeFlow::_sense()
             tformatter.get_entries(c_entries);
             if( c_entries>1)
             {
-                mg_counter(1);
+                increase_mg_entries_counter(1);
             }
-            #if(SEND_SCHEDULER)
-                add_payload_data(1);
-            #endif /* #if(SEND_SCHEDULER) */
+            add_payload_data(1);
         }
 
         if(metric_flag.test(1)==1)
@@ -2012,11 +2047,9 @@ void NodeFlow::_sense()
             tformatter.get_entries(c_entries);
             if( c_entries>1)
             {
-                mg_counter(2);
+                increase_mg_entries_counter(2);
             }
-            #if(SEND_SCHEDULER)
-                add_payload_data(2);
-            #endif /* #if(SEND_SCHEDULER) */
+            add_payload_data(2);
         }
         if(metric_flag.test(2)==1)
         {   
@@ -2025,11 +2058,9 @@ void NodeFlow::_sense()
             tformatter.get_entries(c_entries);
             if( c_entries>1)
             {
-                mg_counter(3);
+                increase_mg_entries_counter(3);
             }
-            #if(SEND_SCHEDULER)
-                add_payload_data(3);
-            #endif /* #if(SEND_SCHEDULER) */
+            add_payload_data(3);
         }
         if(metric_flag.test(3)==1)
         {
@@ -2037,177 +2068,240 @@ void NodeFlow::_sense()
             tformatter.get_entries(c_entries);
             if( c_entries>1)
             {
-                mg_counter(4);
+                increase_mg_entries_counter(4);
             }
-            #if(SEND_SCHEDULER)
-                add_payload_data(4);
-            #endif /* #if(SEND_SCHEDULER) */
+            add_payload_data(4);
         }
     }
     else
     {
-        #if(!SEND_SCHEDULER)
-            add_sensing_entry(1,1);
-        #endif /* #if(!SEND_SCHEDULER) */
+
         MetricGroupA();
         tformatter.get_entries(c_entries);
         if( c_entries>1)
         {
-            mg_counter(1);
+            increase_mg_entries_counter(1);
         }
-        #if(SEND_SCHEDULER)
-            add_payload_data(1);
-        #endif /* #if(SEND_SCHEDULER) */
+        add_payload_data(1);
     }
-    if( is_overflow())
-    {
-        _send(false);
-    }
+ 
+    is_overflow();
 
 }
 
 
-void NodeFlow::read_write_entry(uint8_t group_tag, int len, uint8_t filename)
+void NodeFlow::read_write_entry(uint8_t group_tag, int start_len, int end_len, uint8_t filename)
 {
-    if (len!=0)
+    if (end_len!=0)
     {
-        tformatter.write(group_tag, TFormatter::GROUP_TAG); 
-        tformatter.write(159, TFormatter::RAW);
-        for (int i=0; i< len; i++) 
+        if(start_len==0)
+        {
+            tformatter.write(group_tag, TFormatter::GROUP_TAG); 
+            tformatter.write(159, TFormatter::RAW);
+        }
+        else
+        {
+            tformatter.decrease_entries();
+        }
+        int i=start_len;
+        for (i=start_len; i<end_len; i++) 
         {   
             DataConfig d_conf;
             DataManager::read_file_entry(filename, i, d_conf.data, sizeof(d_conf.parameters));
             tformatter.write(d_conf.parameters.byte, TFormatter::RAW);
 
         }
-        uint16_t total_bentries;
-        tformatter.get_entries(total_bentries);
-        debug("\r\nGROUP =  %d, BYTES = %d",group_tag, total_bentries);
-        tformatter.write(255, TFormatter::RAW);
+        int total_bytes=0;
+        status= DataManager::get_total_written_file_entries(filename, total_bytes);
+        if(status != NODEFLOW_OK)
+        {
+            ErrorHandler(__LINE__,"get_total_written_file_entries",status,__PRETTY_FUNCTION__);
+        }
+        if (total_bytes==i)
+        {
+             tformatter.write(255, TFormatter::RAW);
+        }
+       
     }
-
 }
 
-void NodeFlow::_send(bool interrupt_send)
+void NodeFlow::UploadNow()
+{
+   
+    upload_flag=true;
+}
+
+int NodeFlow::_send()
 {
     uint16_t mga_entries, mgb_entries, mgc_entries, mgd_entries, interrupt_entries;
     int mga_bytes, mgb_bytes, mgc_bytes, mgd_bytes, interrupt_bytes;
     uint8_t metric_group_active=0;
 
-    read_mg_counter(mga_entries, mgb_entries, mgc_entries, mgd_entries, metric_group_active);
+    read_mg_entries_counter(mga_entries, mgb_entries, mgc_entries, mgd_entries, interrupt_entries, metric_group_active);
     read_mg_bytes(mga_bytes, mgb_bytes, mgc_bytes, mgd_bytes, interrupt_bytes); 
-    read_interrupt_counter(interrupt_entries);
+   
     uint32_t total_bytes = mga_bytes+ mgb_bytes+ mgc_bytes+ mgd_bytes+interrupt_bytes;
     size_t buffer_len=0;
-    
-    #if(!SEND_SCHEDULER)
-        debug("\r\nBYTES = %d",total_bytes); 
-        buffer= new uint8_t[total_bytes+1];
-        if (interrupt_send)
-        {
-            buffer[0]=0;
-            buffer_len++;
-        }
-        for (int i=0; i<total_bytes; i++) 
-        { 
-            DataConfig a_conf;
-            status = DataManager::read_file_entry(MetricGroupAConfig_n, i, a_conf.data, sizeof(a_conf.parameters));
-            buffer[buffer_len]=a_conf.parameters.byte;
-            buffer_len++;
-        }
-    #endif /* #if(!SEND_SCHEDULER) */
-
-    #if(SEND_SCHEDULER)
-        debug("\r\nENTRIES = MGA: %d, MGB: %d, MGC: %d, MGD: %d, MGI: %d\r\n",mga_entries, mgb_entries, mgc_entries, mgd_entries,interrupt_entries);
-        debug("\r\nBYTES = MGA: %d, MGB: %d, MGC: %d, MGD: %d, MGI: %d\r\n",mga_bytes, mgb_bytes, mgc_bytes, mgd_bytes, interrupt_bytes);
-        
-        if (interrupt_entries!=0)
-        { 
-            metric_group_active++;
-        }
+    send_block_number=0;
+    debug("\r\nENTRIES = MGA: %d, MGB: %d, MGC: %d, MGD: %d, MGI: %d",mga_entries, mgb_entries, mgc_entries, mgd_entries,interrupt_entries);
+    debug("\r\nBYTES = MGA: %d, MGB: %d, MGC: %d, MGD: %d, MGI: %d",mga_bytes, mgb_bytes, mgc_bytes, mgd_bytes, interrupt_bytes);
+    if(total_bytes != 0)
+    {
         tformatter.serialise_main_cbor_object(metric_group_active);
-       
+    
+        uint16_t available=0;
 
+        tformatter.get_entries(available);
+
+        total_blocks=ceil((available+total_bytes)/TP_TX_BUFFER);
+        
+        available=TP_TX_BUFFER-available;
+        
         #if (INTERRUPT_ON)
-            read_write_entry(0, interrupt_bytes, InterruptConfig_n);
+            status=_divide_to_blocks(5, InterruptConfig_n, interrupt_bytes, available);
+            if (status < NODEFLOW_OK)
+            {
+                return status;
+            }
         #endif
         
-        read_write_entry(1, mga_bytes, MetricGroupAConfig_n);
+        status=_divide_to_blocks(1, MetricGroupAConfig_n, mga_bytes, available);
+        if (status < NODEFLOW_OK)
+        {
+            return status;
+        }
+        
         #if (SCHEDULER_B || METRIC_GROUPS_ON==2 || METRIC_GROUPS_ON==3 || METRIC_GROUPS_ON==4)
-            read_write_entry(2, mgb_bytes, MetricGroupBConfig_n);
+            status=_divide_to_blocks(2, MetricGroupBConfig_n, mgb_bytes, available);
+            if (status < NODEFLOW_OK)
+            {
+                return status;
+            }
         #endif /*  #if (SCHEDULER_B || METRIC_GROUPS_ON==2) */
+
         #if (SCHEDULER_C || METRIC_GROUPS_ON==3 || METRIC_GROUPS_ON==4)
-            read_write_entry(3, mgc_bytes, MetricGroupCConfig_n);
+            status=_divide_to_blocks(3, MetricGroupCConfig_n, mgc_bytes, available);
+            if (status < NODEFLOW_OK)
+            {
+                return status;
+            }
         #endif /*  #if (SCHEDULER_C|| METRIC_GROUPS_ON==3) */
+        
         #if (SCHEDULER_D || METRIC_GROUPS_ON==4)
-            read_write_entry(3, mgd_bytes, MetricGroupDConfig_n);
+            status=_divide_to_blocks(4, MetricGroupDConfig_n, mgd_bytes, available);
+            if (status < NODEFLOW_OK)
+            {
+                return status;
+            }
         #endif /*  #if (SCHEDULER_C|| METRIC_GROUPS_ON==4) */
         
-
-        uint16_t c_entries;
-        tformatter.get_entries(c_entries);
-        buffer= new uint8_t[c_entries];
-        tformatter.return_serialised(buffer, buffer_len);
-        debug("\r\nSending %d bytes..",buffer_len);
-    #endif /* #if(SEND_SCHEDULER) */
-    
-    int response_code=-1;
-    #if BOARD == WRIGHT_V1_0_0
-        int rsrp=0;
-        int rsrq=0;
-        _radio.get_csq(rsrp,rsrq);
-        debug("\r\nNBIOT last know RSRP %d and RSRQ %d",rsrp, rsrq);
-        char recv_data[512];
-        
-        status=_radio.coap_post(buffer, buffer_len, recv_data, SaraN2::TEXT_PLAIN, response_code); 
-        if(response_code == 0 || response_code == 2 ) 
+        status=_send_blocks();
+        if (status < NODEFLOW_OK)
         {
-            debug("\r\nSuccess. Response_code %d",response_code);
+            debug("\r\nLine %d",__LINE__);
+            return status;
+        }
+    }
+    
+   return NodeFlow::NODEFLOW_OK;
+}
+
+int NodeFlow::_divide_to_blocks(uint8_t group, uint8_t filename, uint16_t buffer_len, uint16_t&available)
+{
+    uint16_t entries=0;
+    uint16_t done=0;
+    tformatter.get_entries(entries);
+    available=TP_TX_BUFFER-entries;
+    
+    if(buffer_len!=0)
+    {
+        done=0;
+        while(done<buffer_len)
+        {   
+            
+            if (available>TP_TX_BUFFER)
+            {
+                available = TP_TX_BUFFER;
+            }
+            if(buffer_len<available)
+            {
+                available=buffer_len;
+            }
+            read_write_entry(group, done ,done+available, filename);
+            done += available;
+            tformatter.get_entries(entries);
+            if (entries >= TP_TX_BUFFER )
+            {
+                status=_send_blocks();
+                if (status < NODEFLOW_OK)
+                {
+                    debug("\r\nLine %d",__LINE__);
+                    return status;
+                }
+            }
+            available= buffer_len - done;
+        }
+    }
+    return NodeFlow::NODEFLOW_OK;
+}
+int NodeFlow::_send_blocks()
+{
+    uint8_t send_more_block=0;
+    if(total_blocks> send_block_number)
+    {
+        send_more_block=1;
+    }
+    size_t buffer_len=0;
+    uint16_t c_entries;
+    tformatter.get_entries(c_entries);
+    buffer= new uint8_t[c_entries];
+    buffer=tformatter.return_serialised(buffer_len);
+
+    debug("\r\nSending %d bytes, msg: %d, more_block: %d",buffer_len, send_block_number,send_more_block);
+    int response_code=-1;
+    
+    #if BOARD == WRIGHT_V1_0_0
+        recv_data= new char[50];
+        status=_radio.coap_post(buffer, buffer_len, recv_data, SaraN2::TEXT_PLAIN, send_block_number,
+                                send_more_block, response_code);
+    
+        if((response_code == 0 || response_code == 2) && (send_more_block == false) ) 
+        {
+            debug("\r\nHorrayy, you just sended a message!");
             clear_after_send();
         } 
-
-        else
+        if(status!=NODEFLOW_OK)
         {
-            clear_after_send(); //todo remove
-            debug("\r\nError sending. Response_code %d, status %d",response_code,status);
-            //todo:flag not_sended enabled
-           // clear_after_send();
+            debug("\r\nUnsuccess..");
+            return SEND_FAILED;
         }
-        delete [] buffer;
+        
     #endif /* BOARD == WRIGHT_V1_0_0 */
 
     #if BOARD == EARHART_V1_0_0
-        long done = 0;
-        uint8_t port=1;
-        while (done < buffer_len)
+
+        status=_radio.send_message(total_blocks+1, buffer, buffer_len);
+        if (status < NODEFLOW_OK)
         {
-            long available = buffer_len - done;
-            if (available>180)
-            {
-                available = 180;
-            }
-            uint8_t *buff250= new uint8_t[available];
-            debug("\r\nDone: %d, Available: %d",done,available);           
-            memcpy(buff250, buffer+done, available); 
-            done += available;
-            response_code=sendTTN(port, buff250, available);
-            if(response_code < NODEFLOW_OK)
-            {
-                ThisThread::sleep_for(30000);
-                debug("\r\nRetrying..");
-                response_code=sendTTN(port, buff250, available);
-            }
-            ThisThread::sleep_for(30000);
-            port++;
-            delete [] buff250;
+            return SEND_FAILED;
         }
-        // response_code=sendTTN(1, buffer, buffer_len);
-        if (response_code > NODEFLOW_OK) 
+        handle_receive(); //todo: The rx window closes too soon..
+        if(send_more_block)
         {
-            delete [] buffer;
+            ThisThread::sleep_for(10000);
+        }
+        if (status >= NODEFLOW_OK && send_more_block == false) 
+        {
             clear_after_send();
-        } 
-    #endif /* #if BOARD == EARHART_V1_0_0 */
+        }
+       
+    #endif /* #if BOARD      */
+
+    delete [] buffer;
+    delete [] recv_data;
+    send_block_number++;
+
+    return NODEFLOW_OK;
 }
 
 void NodeFlow::timetodate(uint32_t remainder_time)
@@ -2223,30 +2317,9 @@ void NodeFlow::timetodate(uint32_t remainder_time)
 /**LorawanTP
  */
 #if BOARD == EARHART_V1_0_0
-int NodeFlow::sendTTN(uint8_t port, uint8_t payload[], uint16_t length)
-{
-    debug("\n-------------------SEND & RECEIVE-------------------\r\n");
-    status=_radio.join(CLASS_C);
-    if(status < NODEFLOW_OK)
-    {
-        ErrorHandler(__LINE__,"FAILED TO JOIN",status,__PRETTY_FUNCTION__);
-        return status;
-    }
-    status=_radio.send_message(port, payload, length);
-    if (status < NODEFLOW_OK)
-    {
-        ErrorHandler(__LINE__,"FAILED TO SEND",status,__PRETTY_FUNCTION__);
-        return status;
-    }
-    uint32_t rx_message;
-    uint8_t rx_port;
-    receiveTTN(rx_message, rx_port); //todo: The rx window closes too soon..
-    
-    debug("\r\n--------------------------------------------------\r\n");
-    return status;
-}
 
-int NodeFlow::receiveTTN(uint32_t& rx_message, uint8_t& rx_port)
+
+int NodeFlow::handle_receive()
 {   uint8_t port=0;
     int retcode=0;
     uint32_t rx_dec_buffer[MAX_BUFFER_READING_TIMES];
@@ -2302,16 +2375,15 @@ int NodeFlow::receiveTTN(uint32_t& rx_message, uint8_t& rx_port)
     }
     if(port==0)
     {
-        debug("\nNo Rx available\r\n"); 
+        debug("\nNo Rx available"); 
     }
     else
     {
-        debug("\r\nRx: %d(10)", rx_dec_buffer[0]);
-        debug("\r\nPort: %d", port);
+        debug("\r\nRx: %d(10), Port: %d", rx_dec_buffer[0], port);
     }
     _radio.sleep();
-    rx_message=rx_dec_buffer[0];
-    rx_port=port;
+    // rx_message=rx_dec_buffer[0];
+    // rx_port=port;
     
     return status;
 }
@@ -2460,16 +2532,15 @@ void NodeFlow::enter_standby(int seconds, bool wkup_one)
  */
 void NodeFlow::ErrorHandler(int line, const char* str1, int status,const char* str2) 
 {
-    debug("\r\nError in line No = %d, %s,Status = %d,Function name = %s\r\n",line, str1, status, str2);
     int errCnt=0;
     bool error=false;
     error_increment(errCnt, line, error); 
-    debug("\r\nErrors %d",errCnt);
+    debug("\r\nError in line No = %d, %s,Status = %d,Function name = %s, Errors %d\r\n",line, str1, status, str2, errCnt);
     if(error)
     {
        #if BOARD == EARHART_V1_0_0
-            uint8_t error[3]={5,uint8_t(line),uint8_t(status)}; 
-            sendTTN(219, error, 3);
+            uint8_t error[3]={5,uint8_t(line),uint8_t(status)};
+            _radio.send_message(219, error, 3);
         #endif /* BOARD == EARHART_V1_0_0 */
         NVIC_SystemReset();
     }
@@ -2537,13 +2608,6 @@ int NodeFlow::error_increment(int &errCnt, uint16_t line, bool &error)
 
 void NodeFlow::eeprom_debug()
 {
-    //debug("\r\nGet_max_files : %d",DataManager::get_max_files());
-    //debug("\r\nGet_storage_size_bytes : %d\r\n",DataManager::get_storage_size_bytes());
-
-    // int valid_files;
-    // DataManager::total_stored_files(valid_files);
-    // debug("\r\ntotal_stored_files(valid_files) : %d\r\n",valid_files);
-    debug("\r\n");
     DataManager_FileSystem::GlobalStats_t g_stats;
     DataManager::get_global_stats(g_stats.data);
     DataManager::print_global_stats(g_stats);
@@ -2551,7 +2615,6 @@ void NodeFlow::eeprom_debug()
 
 void NodeFlow::tracking_memory()
 {
-     // allocate enough room for every thread's stack statistics
     int cnt = osThreadGetCount();
     mbed_stats_stack_t *stats = (mbed_stats_stack_t*) malloc(cnt * sizeof(mbed_stats_stack_t));
  
@@ -2561,7 +2624,6 @@ void NodeFlow::tracking_memory()
     }
     free(stats);
  
-   // mbed_mem_trace_set_callback(mbed_mem_trace_default_callback);
     // Grab the heap statistics
     mbed_stats_heap_t heap_stats;
     mbed_stats_heap_get(&heap_stats);
