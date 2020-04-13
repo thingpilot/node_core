@@ -1,12 +1,16 @@
 /**
  ******************************************************************************
  * @file    NodeFLow.h
- * @version 0.4.0
+ * @version 2.0.0
  * @author  Rafaella Nofytou,  Adam Mitchell
  * @brief   Header file of the Wright || Earheart node from Think Pilot. 
  * Handles sleeping times/ eeprom driver/ lorawan/ nb-iot communication
  ******************************************************************************
  */
+
+#ifndef NODEFLOW_H
+#define NODEFLOW_H
+
 #pragma once
 /** Includes
  */
@@ -37,12 +41,17 @@
 #define size(x)  (sizeof(x) / sizeof((x)[0]))
 #define DIVIDE(x) (x)/2
 
-#define FILENAME_START 19 
+#define FILENAME_START 20 
 /** Time related defines 
  */
 #define DAYINSEC    86400
 #define HOURINSEC   3600
 #define MINUTEINSEC 60
+
+#if !defined(INTERRUPT_DELAY)
+   #define INTERRUPT_ON false
+   #define INTERRUPT_DELAY 0
+#endif
 
 /** Define retries for sending
  */
@@ -78,194 +87,13 @@
 
 #define MAX_BUFFER_SENDING_TIMES 10
 
-/** Eeprom configuration. 
- *
- * @param DeviceConfig. Device specifics- send with the message payload.
- * @param SensorDataConfig. Each sensor will be able to store a specific amount of values (to be specified).
- * @param SchedulerConfig. Holds the scheduled times by the user.
- * @param SensingGroupConfig. Each sensor is registered in the Sensor config file.
- */
-#if(OVER_THE_AIR_ACTIVATION)
-    union DeviceConfig
-    {
-        struct 
-        {
-            uint16_t otaa; //true (0)
-            uint8_t device_eui[8];
-            uint8_t application_eui[8];
-            uint8_t application_key[16];
-            uint16_t hey;
-        } parameters;    
-        char data[sizeof(DeviceConfig::parameters)];
-    };
-#endif
-
-#if(!OVER_THE_AIR_ACTIVATION)
-    union DeviceConfig
-    {
-        struct 
-        {
-            uint8_t otaa; //true (0)
-            uint32_t device_address;
-            uint8_t net_session_key[16];
-            uint8_t app_session_key[16];
-        } parameters;    
-        char data[sizeof(DeviceConfig::parameters)];
-    };
-#endif
-
-/** */
-union DataConfig
-{
-    struct 
-    {
-        uint16_t byte;
-        
-    } parameters;
-
-    char data[sizeof(DataConfig::parameters)];
-};
-
-
-union MetricGroupEntriesConfig
-{
-    struct 
-    {
-        uint16_t MetricGroupAEntries;
-        uint16_t MetricGroupBEntries;
-        uint16_t MetricGroupCEntries;
-        uint16_t MetricGroupDEntries;
-        uint16_t InterruptEntries;
-    } parameters;
-
-    char data[sizeof(MetricGroupEntriesConfig::parameters)];
-};
-
-/** The User can define MAX_BUFFER_READING_TIMES 
- */
-union SchedulerConfig
-{
-    struct 
-    {   
-        uint16_t time_comparator; 
-        uint8_t group_id;    
-    } parameters;
-
-    char data[sizeof(SchedulerConfig::parameters)];
-};
-
-/** Program specific flags. Every bit is a different flag. 0:SENSE, 1:SEND, 2:CLOCK, 3:KICK
- */
-union FlagsConfig
-{
-    struct 
-    {    
-        uint16_t value;
-        bool  flag;
-         
-    } parameters;
-
-    char data[sizeof(FlagsConfig::parameters)];
-};
-
-union TimeConfig
-{
-    struct 
-    {
-        uint32_t time_comparator;
-        
-    } parameters;
-
-    char data[sizeof(TimeConfig::parameters)];
-};
-
-union IncrementAConfig
-{
-    struct 
-    {    
-        uint16_t  increment; 
-    } parameters;
-
-    char data[sizeof(IncrementAConfig::parameters)];
-};
-
-union IncrementBConfig
-{
-    struct 
-    {    
-        uint32_t  increment; 
-    } parameters;
-
-    char data[sizeof(IncrementBConfig::parameters)];
-};
-union IncrementCConfig
-{
-    struct 
-    {    
-        uint64_t  increment; 
-    } parameters;
-
-    char data[sizeof(IncrementCConfig::parameters)];
-};
-
-
-/**TODO: Merge with ssck_flags group,Flags for each group */
-union MetricGroupConfig
-{
-    struct 
-    {
-        uint16_t metric_group_id;        
-        
-    } parameters;
-
-    char data[sizeof(MetricGroupConfig::parameters)];
-
-};
-
-union ErrorConfig
-{
-    struct 
-    {
-        uint16_t errCnt;
-        uint16_t line_arr[20];
-    } parameters;
-
-    char data[sizeof(ErrorConfig::parameters)];
-};
-
-/** Each filename in the eeprom hold a unique number
- */
-enum Filenames
-{
-    ErrorConfig_n                   = 0, /**Holds an increment of concecutives errors */
-    DeviceConfig_n                  = 1, 
-    SchedulerConfig_n               = 2,
-    SendSchedulerConfig_n           = 3,
-    ClockSynchFlag_n                = 4,
-    FlagSSCKConfig_n                = 5,
-    NextTimeConfig_n                = 6,
-    TimeConfig_n                    = 7,
-    MetricGroupConfig_n             = 8,
-    MetricGroupTimesConfig_n        = 9, 
-    TempMetricGroupTimesConfig_n    = 10,
-    MetricGroupAConfig_n            = 11,
-    MetricGroupBConfig_n            = 12,
-    MetricGroupCConfig_n            = 13,
-    MetricGroupDConfig_n            = 14,
-    MetricGroupEntriesConfig_n      = 15,
-    InterruptConfig_n               = 16,
-    IncrementAConfig_n              = 17,
-    IncrementBConfig_n              = 18,
-    IncrementCConfig_n              = 19,
-
- };
 
 /** Nodeflow Class
  */
 class NodeFlow: public DataManager
 {
     public:
-
+       
         /** Enumerated list of flags 
          */
         enum Flags 
@@ -317,15 +145,19 @@ class NodeFlow: public DataManager
         volatile Prov_State PROV_STATE = Prov_State::WFC;
         
         /** CONSTRUCTORS *********************************************************************************************/
-        #if BOARD == EARHART_V1_0_0
-        /** Constructor. Create a NodeFlow interface, connected to the pins specified 
+         /** Constructor. Create a NodeFlow interface, connected to the pins specified 
          *  operating at the specified frequency
          * 
          * @param write_control GPIO to enable or disable write functionality
          * @param sda I2C data line pin
          * @param scl I2C clock line pin
          * @param frequency_hz The bus frequency in hertz. 
+
+          PinName mosi=TP_LORA_SPI_MOSI, PinName miso=TP_LORA_SPI_MISO, PinName sclk=TP_LORA_SPI_SCK, PinName nss=TP_LORA_SPI_NSS, PinName reset=TP_LORA_RESET,
+                PinName dio0=PB_4, PinName dio1=PB_1, PinName dio2=PB_0, PinName dio3=PC_13, PinName dio4=NC, PinName dio5=NC, PinName rf_switch_ctl1=NC, 
+                PinName rf_switch_ctl2=NC, PinName txctl=NC, PinName rxctl=NC, PinName ant_switch=NC, PinName pwr_amp_ctl=NC, PinName tcxo=TP_VDD_TCXO,
          */
+        #if BOARD == EARHART_V1_0_0
         NodeFlow(PinName write_control=TP_EEPROM_WC, PinName sda=TP_I2C_SDA, PinName scl=TP_I2C_SCL, int frequency_hz=100000, 
                 PinName mosi=TP_LORA_SPI_MOSI, PinName miso=TP_LORA_SPI_MISO, PinName sclk=TP_LORA_SPI_SCK, PinName nss=TP_LORA_SPI_NSS, PinName reset=TP_LORA_RESET,
                 PinName dio0=PB_4, PinName dio1=PB_1, PinName dio2=PB_0, PinName dio3=PC_13, PinName dio4=NC, PinName dio5=NC, PinName rf_switch_ctl1=NC, 
@@ -357,30 +189,53 @@ class NodeFlow: public DataManager
          *  from sleep. For example, an accelerometer could be configured to detect when the device is moving 
          *  and alert the processor to this to trigger an upload of the devices current location
          */
-        virtual void HandleInterrupt() = 0;
+        // virtual void HandleInterrupt() = 0;
 
-        /** MetricGroupA-D() allows the user to periodically read any sensors that are on the board. Every variant 
-         *  of a board is different, uses different sensors, and thus requires application-specific code in order
-         *  to interact with the sensors.
-         */  
-        virtual void MetricGroupA() = 0; 
+        // /** MetricGroupA-D() allows the user to periodically read any sensors that are on the board. Every variant 
+        //  *  of a board is different, uses different sensors, and thus requires application-specific code in order
+        //  *  to interact with the sensors.
+        //  */  
+        // virtual void MetricGroupA() = 0; 
        
-        virtual void MetricGroupB() = 0;
+        // virtual void MetricGroupB() = 0;
       
-        virtual void MetricGroupC() = 0;
+        // virtual void MetricGroupC() = 0;
     
-        virtual void MetricGroupD() = 0;
+        // virtual void MetricGroupD() = 0;
     
         /** Virtual functions END ************************************************************************************/
 
+        
+        
         
         /** start() drives all the application. It handles the different modem and configuration.
          */
         void start();
 
-        int CreateFile(DataManager_FileSystem::File_t file, uint8_t filename, int struct_size, int length);
+        int CreateFile(uint8_t filename, int struct_size, int length);
         /**Template function for handling the different data types
          */
+        
+        void attachInterval(int (*user_def_function)(), uint32_t interval);
+
+        void attachInterrupt(int (*user_def_function)(void), PinName pin);
+
+        void attachSchedule(int (*user_def_function)(), float schedule_array[], int arr_size);
+        
+        void attachClockSynch(time_t clock_synch_time_interval);
+       
+        void printSchedule();
+
+        void save(char* buffer, uint8_t b_size, uint8_t filename);
+        void add(char* buffer, uint8_t b_size, uint8_t filename);
+
+
+        uint8_t* read(uint8_t filename, uint16_t& file_entries, uint16_t bytes_to_read=NULL); 
+
+        int test_function();
+
+        void is_overflow_v2(uint8_t filename, uint16_t entries_to_remove);
+       
         template <typename DataType>
         /**add_record(DataType data) for adding variable type records to eeprom
          *
@@ -388,48 +243,7 @@ class NodeFlow: public DataManager
          */
         void add_record(DataType data, string str=NULL);
 
-        void UploadNow();
-
-        /**Increment with a value.
-         * 
-         *@param i increment value
-         */
-        int inc_a(int i);
-
-        /**Read current increment value.
-         * 
-         *@param increment_value increment_value
-         */
-        uint16_t read_inc_a();
-
-        /**Increment with a value.
-         * 
-         *@param i increment value
-         */
-        int inc_b(int i);
-
-        /**Read current increment value.
-         * 
-         *@param increment_value increment_value
-         */
-        int read_inc_b(uint16_t& increment_value);
-
-        /**Clears the increment value.
-         * 
-         *@param increment_value increment_value
-         */
-        int clear_inc_b();
-        /**Increment with a value.
-         * 
-         *@param i increment value
-         */
-        int inc_c(int i);
-
-        /**Read current increment value.
-         * 
-         *@param increment_value increment_value
-         */
-        int read_inc_c(uint64_t& increment_value);
+        void UploadNow(uint8_t filename=NULL);
         
         #if BOARD == EARHART_V1_0_0 || BOARD == DEVELOPMENT_BOARD_V1_1_0 /* #endif at EoF */
         void getDevAddr();
@@ -543,6 +357,8 @@ class NodeFlow: public DataManager
          *                                       
          */     
         void set_scheduler(int latency, uint32_t& next_timediff);
+        void set_schedulerV2(int latency, uint32_t& next_timediff);
+        int set_flags_configV2(uint8_t uck_flag);
 
         /** Scheduler holds the length and group id for each specific times 
          *                  
@@ -826,10 +642,16 @@ class NodeFlow: public DataManager
         char* recv_data;
         int status;
         bool upload_flag=false;
-
         uint8_t send_block_number=0;
         uint8_t total_blocks=0;
+        time_t starttime=0;
 
+        //v2 new stuff
+        int (NodeFlow::*p[4]) ();
+        bool clock_synch= false;
+        bool kick= false;
+        bool user_function= false;
+        time_t hold_time=0;
         // int filenames_len=Filenames::length;
         /**
          */
@@ -846,4 +668,196 @@ class NodeFlow: public DataManager
 };
 
 
+/** Eeprom configuration. 
+ *
+ * @param DeviceConfig. Device specifics- send with the message payload.
+ * @param SensorDataConfig. Each sensor will be able to store a specific amount of values (to be specified).
+ * @param SchedulerConfig. Holds the scheduled times by the user.
+ * @param SensingGroupConfig. Each sensor is registered in the Sensor config file.
+ */
+#if(OVER_THE_AIR_ACTIVATION)
+    union DeviceConfig
+    {
+        struct 
+        {
+            uint16_t otaa; //true (0)
+            uint8_t device_eui[8];
+            uint8_t application_eui[8];
+            uint8_t application_key[16];
+            uint16_t hey;
+        } parameters;    
+        char data[sizeof(DeviceConfig::parameters)];
+    };
+#endif
 
+#if(!OVER_THE_AIR_ACTIVATION)
+    union DeviceConfig
+    {
+        struct 
+        {
+            uint8_t otaa; //true (0)
+            uint32_t device_address;
+            uint8_t net_session_key[16];
+            uint8_t app_session_key[16];
+        } parameters;    
+        char data[sizeof(DeviceConfig::parameters)];
+    };
+#endif
+
+/** */
+union DataConfig
+{
+    struct 
+    {
+        uint16_t byte;
+        
+    } parameters;
+
+    char data[sizeof(DataConfig::parameters)];
+};
+
+typedef   int (NodeFlow::*fpointer)();
+union MainScheduler //clock, kick watchdog //any other time based function within nodeflow
+{
+    struct 
+    {
+        fpointer f;
+        time_t trigger_time;
+        time_t interval_time;
+        
+    } parameters;
+
+    char data[sizeof(MainScheduler::parameters)];
+};
+typedef   int (*fp)();
+union UserDefinedScheduler
+{
+    struct 
+    {
+        fp f;
+        time_t trigger_time;
+        time_t interval_time;
+        
+    } parameters;
+
+    char data[sizeof(UserDefinedScheduler::parameters)];
+};
+
+union UserDefinedInterrupts
+{
+    struct 
+    {
+        fp f;
+        PinName pin;
+        
+    } parameters;
+
+    char data[sizeof(UserDefinedInterrupts::parameters)];
+};
+
+union MetricGroupEntriesConfig
+{
+    struct 
+    {
+        uint16_t MetricGroupAEntries;
+        uint16_t MetricGroupBEntries;
+        uint16_t MetricGroupCEntries;
+        uint16_t MetricGroupDEntries;
+        uint16_t InterruptEntries;
+    } parameters;
+
+    char data[sizeof(MetricGroupEntriesConfig::parameters)];
+};
+
+/** The User can define MAX_BUFFER_READING_TIMES 
+ */
+union SchedulerConfig
+{
+    struct 
+    {   
+        uint16_t time_comparator; 
+        uint8_t group_id;    
+    } parameters;
+
+    char data[sizeof(SchedulerConfig::parameters)];
+};
+
+/** Program specific flags. Every bit is a different flag. 0:SENSE, 1:SEND, 2:CLOCK, 3:KICK
+ */
+union FlagsConfig
+{
+    struct 
+    {    
+        uint16_t value;
+        bool  flag;
+         
+    } parameters;
+
+    char data[sizeof(FlagsConfig::parameters)];
+};
+
+union TimeConfig
+{
+    struct 
+    {
+        uint32_t time_comparator;
+        
+    } parameters;
+
+    char data[sizeof(TimeConfig::parameters)];
+};
+
+/**TODO: Merge with ssck_flags group,Flags for each group */
+union MetricGroupConfig
+{
+    struct 
+    {
+        uint16_t metric_group_id;        
+        
+    } parameters;
+
+    char data[sizeof(MetricGroupConfig::parameters)];
+
+};
+
+union ErrorConfig
+{
+    struct 
+    {
+        uint16_t errCnt;
+        uint16_t line_arr[20];
+    } parameters;
+
+    char data[sizeof(ErrorConfig::parameters)];
+};
+
+/** Each filename in the eeprom hold a unique number
+ */
+enum Filenames
+{
+    ErrorConfig_n                   = 0, /**Holds an increment of concecutives errors */
+    DeviceConfig_n                  = 1, 
+    TempSchedulerConfig_n           = 2,
+    TotalFiles_n                    = 3,
+    ClockSynchFlag_n                = 4,
+    FlagSSCKConfig_n                = 5,
+    NextTimeConfig_n                = 6,
+    TimeConfig_n                    = 7,
+    MetricGroupConfig_n             = 8,
+    MetricGroupTimesConfig_n        = 9, 
+    TempMetricGroupTimesConfig_n    = 10,
+    MetricGroupAConfig_n            = 11,
+    MetricGroupBConfig_n            = 12,
+    MetricGroupCConfig_n            = 13,
+    MetricGroupDConfig_n            = 14,
+    MetricGroupEntriesConfig_n      = 15,
+    InterruptConfig_n               = 16,
+    MainScheduler_n                 = 17,
+    UserDefinedScheduler_n          = 18,
+    FlagUCKConfig_n                 = 19,
+    UserDefinedInterrupts_n         = 20,
+
+
+ };
+
+#endif // NODEFLOW_H
