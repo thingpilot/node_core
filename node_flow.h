@@ -21,9 +21,9 @@
 #include "TPL5010.h"
 #include "tp_sleep_manager.h"
 #include "tformatter.h"
-#include <cmath>
+//#include <cmath>
 #include <bitset>
-#include <algorithm>    
+//#include <algorithm>    
 #include "mbed_mem_trace.h"
 
 #define NODEFLOW_DBG true
@@ -41,7 +41,7 @@
 #define size(x)  (sizeof(x) / sizeof((x)[0]))
 #define DIVIDE(x) (x)/2
 
-#define FILENAME_START 20 
+#define FILENAME_START 7 
 /** Time related defines 
  */
 #define DAYINSEC    86400
@@ -58,35 +58,6 @@
 #define MAX_SEND_RETRIES 3
 #define MAX_OVERWRITE_RETRIES 3
 
-#if (!SCHEDULER_B)
-    #define SCHEDULER_B_SIZE 0
-#endif
-#if (!SCHEDULER_C)
-    #define SCHEDULER_C_SIZE 0
-#endif
-#if (!SCHEDULER_D)
-    #define SCHEDULER_D_SIZE 0
-#endif
-#if (SCHEDULER)
-    #define SCHEDULER_SIZE (SCHEDULER_A_SIZE + SCHEDULER_B_SIZE +  SCHEDULER_C_SIZE + SCHEDULER_D_SIZE)
-    extern float scheduler[]; 
-    extern float schedulerA[];
-    extern float schedulerB[];
-    extern float schedulerC[];
-    extern float schedulerD[];
-#endif
-
-#if(!SCHEDULER)
-    #define SCHEDULER_SIZE METRIC_GROUPS_ON
-    extern float scheduler[]; 
-#endif
-
-#if(SEND_SCHEDULER)
-     extern float send_scheduler[];
-#endif
-
-#define MAX_BUFFER_SENDING_TIMES 10
-
 
 /** Nodeflow Class
  */
@@ -94,22 +65,6 @@ class NodeFlow: public DataManager
 {
     public:
        
-        /** Enumerated list of flags 
-         */
-        enum Flags 
-        {
-            FLAG_WDG                = 0,
-            FLAG_SENSING            = 1,
-            FLAG_CLOCK_SYNCH        = 2,
-            FLAG_SENDING            = 3,
-            FLAG_WAKEUP_PIN         = 4,
-            FLAG_SENSE_SYNCH        = 5,
-            FLAG_SENSE_SEND         = 6,     
-            FLAG_SEND_SYNCH         = 7,
-            FLAG_SENSE_SEND_SYNCH   = 8,
-            FLAG_UNKNOWN            = 9 /**This should not happen*/          
-        };
-
         /** Enumerated list of possible comms radio stacks
          */
         enum class Comms_Radio_Stack
@@ -175,51 +130,34 @@ class NodeFlow: public DataManager
          */
         ~NodeFlow();
 
-        /** VIRTUAL FUNCTIONS *****************************************************************************************
-         *  Virtual functions MUST be overridden by the application developer. The description of these functions 
-         *  is given above each virtual definition
-         */
-        
-        /** setup() allows the user to write code that will only be executed once when the device is initialising.
-         *  This is akin to Arduino's setup function and can be used to, for example, configure a sensor
-         */
-        virtual void setup() = 0;
-
-        /** HandleInterrupt() allows the user to define what should happen if an interrupt wakes the processor
-         *  from sleep. For example, an accelerometer could be configured to detect when the device is moving 
-         *  and alert the processor to this to trigger an upload of the devices current location
-         */
-        // virtual void HandleInterrupt() = 0;
-
-        // /** MetricGroupA-D() allows the user to periodically read any sensors that are on the board. Every variant 
-        //  *  of a board is different, uses different sensors, and thus requires application-specific code in order
-        //  *  to interact with the sensors.
-        //  */  
-        // virtual void MetricGroupA() = 0; 
-       
-        // virtual void MetricGroupB() = 0;
-      
-        // virtual void MetricGroupC() = 0;
-    
-        // virtual void MetricGroupD() = 0;
-    
-        /** Virtual functions END ************************************************************************************/
-
-        
-        
-        
         /** start() drives all the application. It handles the different modem and configuration.
          */
         void start();
 
-        int CreateFile(uint8_t filename, int struct_size, int length);
-        /**Template function for handling the different data types
+        /** VIRTUAL FUNCTIONS *****************************************************************************************
+         *  Virtual functions MUST be overridden by the application developer.
          */
+    
+        /** setup() allows the user to write code that will only be executed once when the device is initialising.
+         *  This is akin to Arduino's setup function and can be used to, for example, configure a sensor
+         */
+        virtual void setup() = 0;   
+        /** Virtual functions END ************************************************************************************/
         
+        /** PUBLIC FUNCTIONS *****************************************************************************************
+         */
+        /** User can create a new file with a specific struct size and entries */
+        int CreateFile(uint8_t filename, int struct_size, int max_entries);
+        
+        /** User can attach intervals connected to user defined functions */
         void attachInterval(int (*user_def_function)(), uint32_t interval);
 
+        /** User can attach Interrupts connected to user defined functions,
+         *  connected with or gate to PA0?
+         */
         void attachInterrupt(int (*user_def_function)(void), PinName pin);
-
+        /** User can attach scheduled times of HH.MM connected to user defined functions
+         */
         void attachSchedule(int (*user_def_function)(), float schedule_array[], int arr_size);
         
         void attachClockSynch(time_t clock_synch_time_interval);
@@ -229,19 +167,10 @@ class NodeFlow: public DataManager
         void save(char* buffer, uint8_t b_size, uint8_t filename);
         void add(char* buffer, uint8_t b_size, uint8_t filename);
 
-
+        //TODO:ti
         uint8_t* read(uint8_t filename, uint16_t& file_entries, uint16_t bytes_to_read=NULL); 
 
-        int test_function();
-
-        void is_overflow_v2(uint8_t filename, uint16_t entries_to_remove);
-       
-        template <typename DataType>
-        /**add_record(DataType data) for adding variable type records to eeprom
-         *
-         *@param data Actual data to be written to the eeprom
-         */
-        void add_record(DataType data, string str=NULL);
+        void is_overflow(uint8_t filename, uint16_t entries_to_remove);
 
         void UploadNow(uint8_t filename=NULL);
         
@@ -249,8 +178,7 @@ class NodeFlow: public DataManager
         void getDevAddr();
         #endif
 
-        //todo: move this
-        void read_write_entry(uint8_t group_tag, int start_len, int end_len, uint8_t filename);
+        
     private:
 
         void _test_provision();
@@ -300,107 +228,22 @@ class NodeFlow: public DataManager
          *                  
          */ 
         int timetoseconds(float scheduler_time, uint8_t group_id);
-        
-      
-        /** Holds the time until the next wakeup
-         *                 
-         * @return          time_comparator
+
+         /** Format entry with CBOR and add to the queque to sent
          *                  
          */ 
-        int set_time_config(int time_comparator);
-
-        /**Interval/ periodic sensing of metric groups *******************************************************
-         */
-
-        /** Initialise the metric groups file.
-         *                 
-         * @return          It could be one of these:
-         *                  
-         */ 
-        int metric_config_init(int length);
-        /** Adds the metric groups for interval sensing times, handles each group differently
-         *                 
-         * @return          It could be one of these:
-         *                  
-         */    
-        void add_metric_groups(); 
-
-        /** Sets the next reading time for interval periodic sensing, handles each group differently
-         *                 
-         * @param time      The sleeping time until next reading/sensing etc sensors measurement in seconds.
-         * @return          It could be one of these:
-         *                  
-         */        
-        int set_reading_time(uint32_t& time); 
-
-        /** Fixes the next reading times after interrupt/clock etc interrupt for each group differently
-         *                 
-         * @param time      The sleeping time until next reading/sensing etc sensors measurement in seconds.
-         * @return          It could be one of these:
-         *                  
-         */
-         int set_temp_reading_times(uint32_t time);
         
-        /** Specific times for each sensing of metric groups *******************************************************
-         */
-
-        /** Initialise the Scheduler for reading metric groups at specific times each day. 
-         *                  
-         * @return          It could be one of these:                         
-         */
-        int init_sched_config();
-
+        void read_write_entry(uint8_t group_tag, int start_len, int end_len, uint8_t filename, uint16_t struct_size);
+        
         /** Scheduler for reading metric groups at specific times each day. 
          *                  
-         * @param time      The sleeping time until next reading/sensing etc sensors measurement in seconds.
+         * @Setting/updating the saram time   ntil next reading/sensing e or intervaltc sensors measurement in seconds.
          * @return          It could be one of these:
          *                                       
          */     
         void set_scheduler(int latency, uint32_t& next_timediff);
-        void set_schedulerV2(int latency, uint32_t& next_timediff);
-        int set_flags_configV2(uint8_t uck_flag);
 
-        /** Scheduler holds the length and group id for each specific times 
-         *                  
-         * @param time      The sleeping time until next reading/sensing etc sensors measurement in seconds.
-         * @return          It could be one of these:
-         *                                       
-         */ 
-        int read_sched_config(int i,uint16_t& time_comparator);
-
-        int read_sched_group_id(int i,uint8_t& time_comparator);
-        /** Overwrite the Scheduler holds the length and group id for each specific time. 
-         *                                      
-         */ 
-        int overwrite_sched_config(uint16_t code,uint16_t length);
-         /** Append entries to the scheduler. 
-         *                                      
-         */ 
-        int append_sched_config(uint16_t time_comparator, uint8_t group_id);
-
-        /** Initialise the Send Scheduler for reading metric groups at specific times each day. 
-         *                  
-         * @return          It could be one of these:                         
-         */
-        int init_send_sched_config();
-
-        /** Read the Send Scheduler holds the length and group id for each specific time. 
-         *                  
-         * @param time      The sleeping time until next reading/sensing/sending etc in seconds.
-         * @return          It could be one of these:
-         *                                       
-         */ 
-        int read_send_sched_config(int i, uint16_t& time);
-        /** Overwrite the send scheduler. 
-         *                                      
-         */
-        int overwrite_send_sched_config(uint16_t code,uint16_t length);
-
-         /** Append entries to the send scheduler. 
-         *                                      
-         */ 
-        int append_send_sched_config(uint16_t time_comparator);
-        
+     
         /** Overwrite the clock_synch_config. 
          *                                      
          */
@@ -416,137 +259,16 @@ class NodeFlow: public DataManager
          *                                       
          */
         int read_clock_synch_config(uint16_t& time,bool &clockSynchOn);
-
-        /** Get wakeup flag.
-         *
-         *@return               It could be one of these:
-         *                      FLAG_WDG
-         *                      FLAG_SENSING
-         *                      FLAG_CLOCK_SYNCH
-         *                      FLAG_SENDING
-         *                      FLAG_WAKEUP_PIN
-         *                      FLAG_SENSE_SYNCH
-         *                      FLAG_SENSE_SEND   
-         *                      FLAG_SEND_SYNCH
-         *                      FLAG_SENSE_SEND_SYNCH
-         *                      FLAG_UNKNOWN
-         */
-        int get_wakeup_flags();
-
-
-        /** Set flags. 4 flags for sensing, sending, clock synchronisation and kick the watchdog
-         *
-         *@return               It could be one of these:
-         *                      FLAG_SENSING = dec(1)
-         *                      FLAG_SENDING = dec(2) 
-         *                      FLAG_SENSE_SEND = dec(3)
-         *                      FLAG_CLOCK_SYNCH = dec(4)
-         *                      FLAG_SENSE_SYNCH = dec(5) 
-         *                      FLAG_SEND_SYNCH = dec(6)
-         *                      FLAG_SENSE_SEND_SYNCH = dec(7)
-         *                      FLAG_WDG = dec(8) 
-         */
-        int set_flags_config(uint8_t ssck_flag);
-
-        /** Set wakeup pin flag to true or false.
-         *
-         */
-        int set_wakeup_pin_flag(bool wakeup_pin);
-
-        /** Metric flags are used for each of the groups A to D. 
-         *
-         *@return               A decimal represantation of:
-         *                      MetricGroupA = dec(1)
-         *                      MetricGroupB = dec(2) 
-         *                      MetricGroupA&&B = dec(3)
-         *                      MetricGroupC = dec(4)
-         *                      MetricGroupA&&C = dec(5) 
-         *                      MetricGroupB&&C = dec(6)
-         *                      MetricGroupA&&B&&C  = dec(7)
-         *                      MetricGroupD = dec(8)
-         *                      ..
-         *                      MetricGroupA&&B&&C&&D = dec(15)
-         */
-        int overwrite_metric_flags(uint8_t ssck_flag);
-
-        /** Get metric flags are used for each of the groups A to D in order to handle each group after a wakeup timer. 
-         *
-         *@return               A decimal represantation of:
-         *                      MetricGroupA = dec(1)
-         *                      MetricGroupB = dec(2) 
-         *                      MetricGroupA&&B = dec(3)
-         *                      MetricGroupC = dec(4)
-         *                      MetricGroupA&&C = dec(5) 
-         *                      MetricGroupB&&C = dec(6)
-         *                      MetricGroupA&&B&&C  = dec(7)
-         *                      MetricGroupD = dec(8)
-         *                      ..
-         *                      MetricGroupA&&B&&C&&D = dec(15)
-         */
-        int get_metric_flags(uint8_t &flag);
-
-
-        int add_payload_data(uint8_t metric_group_flag);
         
-        void _sense();
-        int _send();
-        int _divide_to_blocks(uint8_t group, uint8_t filename, uint16_t buffer_len, uint16_t&available);
+        /* Divide the data to blocks to sent them over radio
+         */
+        int _divide_to_blocks(uint8_t group, uint8_t filename, uint16_t buffer_len, uint16_t struct_size, uint16_t&available);
+        
+        /* Divide the data to blocks to sent them over radio
+         */
         int _send_blocks();
         
-        /**Adds a bytes of sensing entries added as record by the user.
-         */
-        int add_sensing_entry(uint8_t value, uint8_t metric_group);
-
-        void is_overflow();
-
-        /**Counter for each metric group entry
-         * 
-         *@param mg_flag which metric group to increment
-         */
-        int increase_mg_entries_counter( uint8_t mg_flag);
-
-        /**Read current counter for each metric group entry
-         * 
-         *@return mg_entries for each group
-         */
-        int read_mg_entries_counter(uint16_t& mga_entries, uint16_t& mgc_entries,uint16_t& mgd_entries, uint16_t& mgb_entries, uint16_t& interrupt_entries, uint8_t & metric_group_active);
-        
-        /**Read current bytes written for each metric group
-         * 
-         *@return mg_bytes for each mgroup
-         */
-        int read_mg_bytes(int& mga_bytes, int& mgb_bytes, int& mgc_bytes, int& mgd_byte, int& interrupt_bytes); 
-
-        /** INTERRUPT**************************************************************************************************/
-        /** Handle Interrupt 
-         */
-       
-        int is_delay_pin_wakeup_flag();
-
-        int correct_latency(int latency);
-
-        /** Re-measures the sleeping time after an interrupt 
-         */
-        int get_interrupt_latency(uint32_t &next_sch_time);
-
-        /** Holds the wakeup (full timestamp). 
-            TODO: this will be used to check that we didn't missed a measurement while on program not implemented
-         */
-        int overwrite_wakeup_timestamp(uint16_t time_remainder);
-
-        /** CLEARS**************************************************************************************************/
-        /**Clear the counter entries
-         */
-        int clear_mg_counter();
-
-        /**Clears the increment/s.
-         */
-        int clear_increment();
-
-        /**Clears the increment/s && the eeprom after sending
-         */
-        int clear_after_send();
-
+    
         /** SLEEP MANAGER*********************************************************************************************/
         /** Manage device sleep times before calling sleep_manager.standby().
          *  Ensure that the maximum time the device can sleep for is 6600 seconds,
@@ -557,7 +279,7 @@ class NodeFlow: public DataManager
          *                 on WKUP_PIN1
          * @return None 
          */
-        void enter_standby(int seconds, bool wkup_one);
+        // void enter_standby(int seconds, bool wkup_one);
 
         /** Instance of TPL5010 watchdog timer 
          */
@@ -634,25 +356,19 @@ class NodeFlow: public DataManager
         void eeprom_debug();
         void tracking_memory();
         
-        #if(SCHEDULER)
-            float* scheduler;
-        #endif
         uint8_t* buffer;
-        uint8_t* buff; //todo remove
         char* recv_data;
         int status;
-        bool upload_flag=false;
         uint8_t send_block_number=0;
         uint8_t total_blocks=0;
         time_t starttime=0;
 
         //v2 new stuff
-        int (NodeFlow::*p[4]) ();
         bool clock_synch= false;
         bool kick= false;
         bool user_function= false;
         time_t hold_time=0;
-        // int filenames_len=Filenames::length;
+       
         /**
          */
         enum
@@ -716,6 +432,18 @@ union DataConfig
     char data[sizeof(DataConfig::parameters)];
 };
 
+union FilesConfig
+{
+    struct 
+    {
+        uint8_t byte;
+        uint8_t size;
+        
+    } parameters;
+
+    char data[sizeof(FilesConfig::parameters)];
+};
+
 typedef   int (NodeFlow::*fpointer)();
 union MainScheduler //clock, kick watchdog //any other time based function within nodeflow
 {
@@ -755,33 +483,6 @@ union UserDefinedInterrupts
     char data[sizeof(UserDefinedInterrupts::parameters)];
 };
 
-union MetricGroupEntriesConfig
-{
-    struct 
-    {
-        uint16_t MetricGroupAEntries;
-        uint16_t MetricGroupBEntries;
-        uint16_t MetricGroupCEntries;
-        uint16_t MetricGroupDEntries;
-        uint16_t InterruptEntries;
-    } parameters;
-
-    char data[sizeof(MetricGroupEntriesConfig::parameters)];
-};
-
-/** The User can define MAX_BUFFER_READING_TIMES 
- */
-union SchedulerConfig
-{
-    struct 
-    {   
-        uint16_t time_comparator; 
-        uint8_t group_id;    
-    } parameters;
-
-    char data[sizeof(SchedulerConfig::parameters)];
-};
-
 /** Program specific flags. Every bit is a different flag. 0:SENSE, 1:SEND, 2:CLOCK, 3:KICK
  */
 union FlagsConfig
@@ -794,30 +495,6 @@ union FlagsConfig
     } parameters;
 
     char data[sizeof(FlagsConfig::parameters)];
-};
-
-union TimeConfig
-{
-    struct 
-    {
-        uint32_t time_comparator;
-        
-    } parameters;
-
-    char data[sizeof(TimeConfig::parameters)];
-};
-
-/**TODO: Merge with ssck_flags group,Flags for each group */
-union MetricGroupConfig
-{
-    struct 
-    {
-        uint16_t metric_group_id;        
-        
-    } parameters;
-
-    char data[sizeof(MetricGroupConfig::parameters)];
-
 };
 
 union ErrorConfig
@@ -840,23 +517,9 @@ enum Filenames
     TempSchedulerConfig_n           = 2,
     TotalFiles_n                    = 3,
     ClockSynchFlag_n                = 4,
-    FlagSSCKConfig_n                = 5,
-    NextTimeConfig_n                = 6,
-    TimeConfig_n                    = 7,
-    MetricGroupConfig_n             = 8,
-    MetricGroupTimesConfig_n        = 9, 
-    TempMetricGroupTimesConfig_n    = 10,
-    MetricGroupAConfig_n            = 11,
-    MetricGroupBConfig_n            = 12,
-    MetricGroupCConfig_n            = 13,
-    MetricGroupDConfig_n            = 14,
-    MetricGroupEntriesConfig_n      = 15,
-    InterruptConfig_n               = 16,
-    MainScheduler_n                 = 17,
-    UserDefinedScheduler_n          = 18,
-    FlagUCKConfig_n                 = 19,
-    UserDefinedInterrupts_n         = 20,
-
+    MainScheduler_n                 = 5,
+    UserDefinedScheduler_n          = 6,
+    UserDefinedInterrupts_n         = 7,
 
  };
 
