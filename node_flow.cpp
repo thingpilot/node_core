@@ -80,15 +80,16 @@ void NodeFlow::_run()
  */
 int NodeFlow::get_timestamp()
 {
+  
     debug("\r\n--------------------TIMESTAMP-------------------\r\n");
-    uint32_t unix_time;
+    uint32_t unix_time=0;
     //todo: remove the earhart if wright same exists
     #if BOARD == EARHART_V1_0_0
         _radio.get_unix_time(unix_time);
     #endif /* BOARD == EARHART_V1_0_0 */
 
     #if BOARD == WRIGHT_V1_0_0
-       // _radio.get_unix_time(unix_time); 
+    // _radio.get_unix_time(unix_time); 
     #endif //BOARD == WRIGHT_V1_0_0
 
     if (unix_time>time(NULL))
@@ -106,43 +107,50 @@ void NodeFlow::start()
 {
     debug("\r\n                      __|__\n               --+--+--(_)--+--+--\n-------------------THING PILOT--------------------\r\n");
     debug("\nDevice Unique ID: %08X %08X %08X", STM32_UID[0], STM32_UID[1], STM32_UID[2]);
-    starttime=time_now(); //
-    starttime= fmod(starttime,86400);
-    bool initialised = false;
-    #if BOARD == EARHART_V1_0_0
+    bool button_on=false;
+     #if BOARD == EARHART_V1_0_0
         DigitalIn btn(PA_8);
     #endif
     #if BOARD == WRIGHT_V1_0_0
         DigitalIn btn(PB_0);
     #endif
+    button_on=btn.read();
+    if(button_on)
+    {
+        DigitalOut buzzer(TP_SPI_NSS); //todo: remove? specific to the app?
+        buzzer=1;
+        ThisThread::sleep_for(50);
+        buzzer=0;
+    }
+    if(CLOCK_SYNCH) 
+    {
+        get_timestamp();
+        timetodate(time_now());
+    }
+
+    starttime=time_now(); 
+    starttime= fmod(starttime,86400);
+
+    bool initialised = false;
     status=DataManager::is_initialised(initialised);
-    if(btn.read() || !initialised)
+    if(button_on || !initialised)
     {
         initialised=false;
         while(!initialised)
         {   
-            set_time(0);
             status=initialise();
             DataManager::is_initialised(initialised);
             debug("\r\n----------------------SETUP-----------------------\r");
-            if(CLOCK_SYNCH) 
-            {
-               // get_timestamp();
-                set_time(1591276800);
-                starttime=time_now(); 
-                starttime=fmod(starttime,86400); 
-                timetodate(time_now());
-            }
             setup(); /** Pure virtual by the user */
         }
     }
+    timetodate(time_now());
     if (status != NODEFLOW_OK)
     { 
         NVIC_SystemReset(); 
     }
-    while(true)
+    for( ; ;)
     {
-
         Serial a(TP_PC_TXU,TP_PC_RXU);
         DataManager dm(TP_EEPROM_WC, TP_I2C_SDA, TP_I2C_SCL, 100000);
         TP_Sleep_Manager::WakeupType_t wkp = sleep_manager.get_wakeup_type();
@@ -155,6 +163,43 @@ void NodeFlow::start()
 
         watchdog.kick();
         time_t start_time=time_now();
+
+        FlagsCon f_conf;
+        status=DataManager::read_file_entry(Flags_n, 0, f_conf.data,sizeof(f_conf.parameters));
+        if(status != NODEFLOW_OK)
+        {
+            ErrorHandler(__LINE__,"FlagUCKonfig",status,__PRETTY_FUNCTION__);
+        }
+
+        bitset<8> uck_flag(f_conf.parameters.flag);
+
+        if(wkp==TP_Sleep_Manager::WakeupType_t::WAKEUP_RESET || wkp==TP_Sleep_Manager::WakeupType_t::WAKEUP_SOFTWARE) 
+        {
+            status=DataManager::init_gstats();
+            _test_provision();
+            debug("\r\n----------------------START----------------------\r\n");
+
+            #if BOARD == WRIGHT_V1_0_0
+                initialise_nbiot();
+            #endif /* #if BOARD == WRIGHT_V1_0_0 */
+            //if hold time !=0 then 
+            if(f_conf.parameters.hold_time!=0)
+            {
+                if(time(NULL)<1588089985)
+                {
+                    //the time is wrong update with the last you remember?
+                    set_time(f_conf.parameters.hold_time);
+                }
+                time_t time_after_false_wakeup=f_conf.parameters.hold_time-time_now();
+                next_time=time_after_false_wakeup;
+            }
+            else
+            {
+                latency=time_now()-start_time;
+                set_scheduler(latency, next_time);
+            }
+        }
+
         if(wkp==TP_Sleep_Manager::WakeupType_t::WAKEUP_PIN)
         { 
             debug("\r\n--------------------PIN WAKEUP--------------------\r\n");
@@ -168,7 +213,7 @@ void NodeFlow::start()
                 DigitalIn interrupt(u_conf.parameters.pin);
                 if(interrupt.read())
                 {
-                    debug("\r\nInterrupt Detected, priority %d \r\n",i); 
+                    debug("Interrupt Detected, priority %d \r\n",i); 
                     u_conf.parameters.f();
                 }
             }
@@ -177,23 +222,26 @@ void NodeFlow::start()
         }
         if(wkp==TP_Sleep_Manager::WakeupType_t::WAKEUP_TIMER) 
         {
-            if (kick==true) //remove the pin wakeup?? //pin_wakeup==true ||
+            
+            if (uck_flag.test(2))//kick==true) //remove the pin wakeup?? //pin_wakeup==true ||
             {
                 debug("\r\n-------------------KICK WDG-------------------\r\n");
-                time_t time_after_false_wakeup=hold_time-time_now();
-                next_time=time_after_false_wakeup;
-                kick=false;
+                // time_t time_after_false_wakeup=hold_time-time_now();
+                // next_time=time_after_false_wakeup;
+                //kick=false;
+                latency=time_now()-start_time;
+                set_scheduler(latency, next_time);
             }
             else 
             {
                 debug("\r\n-------------------TIMER WAKEUP-------------------\r\n");
                 timetodate(time_now());
-                if (clock_synch==true)
+                if (uck_flag.test(1))//clock_synch==true)
                 {
                     get_timestamp();
-                    clock_synch==false;
+                    clock_synch=false;
                 }
-                if (user_function==true)
+                if (uck_flag.test(0))//user_function==true)
                 {
                     tformatter.setup();
                     int entries=0;
@@ -210,20 +258,7 @@ void NodeFlow::start()
                 set_scheduler(latency, next_time);
             }
         }
-        if(wkp==TP_Sleep_Manager::WakeupType_t::WAKEUP_RESET || wkp==TP_Sleep_Manager::WakeupType_t::WAKEUP_SOFTWARE) 
-        {
-            status=DataManager::init_gstats();
-            _test_provision();
-            debug("\r\n----------------------START----------------------\r\n");
-           
-            #if BOARD == WRIGHT_V1_0_0
-                initialise_nbiot();
-            #endif /* #if BOARD == WRIGHT_V1_0_0 */
-           
-            latency=time_now()-start_time;
-            set_scheduler(latency, next_time);
-        }
-
+        
         if(wkp==TP_Sleep_Manager::WakeupType_t::WAKEUP_UNKNOWN)
         {
             debug("\r\nWAKEUP_UNKNOWN\r\n");
@@ -238,21 +273,17 @@ void NodeFlow::start()
         }
         debug("\nGoing to sleep for %d s.\nWakeup at ", next_time);
         timetodate(next_time+time_now());
-        bool wkup=false;
+        bool wp=true;
         #if (INTERRUPT_ON) //todo: bug
             if (next_time<15) //to prevent more delays
             {
-               wkup=false;
-            }
-            else
-            {
-                wkup=true;
+               wp=false;
             }
         #endif
         #if (!INTERRUPT_ON)
-            wkup=false;
+            wp=false;
         #endif 
-           sleep_manager.stop(next_time, false);
+           sleep_manager.stop(next_time, wp);
     }
 }
 
@@ -313,9 +344,8 @@ void NodeFlow::printSchedule()
     for (int i=0; i<entries; i++)
     {
         status = DataManager::read_file_entry(UserDefinedScheduler_n, i, u_conf.data, sizeof(u_conf.parameters));
-        debug("%d.",i);
+        debug("%d. Time %d. ",i,u_conf.parameters.trigger_time );
         timetodate(u_conf.parameters.trigger_time);
-
     }
 }
 
@@ -418,11 +448,6 @@ void NodeFlow::_test_provision()
  */
 int NodeFlow::initialise()
 {    
-    DigitalOut buzzer(TP_SPI_NSS); //todo: remove? specific to the app?
-    buzzer=1;
-    ThisThread::sleep_for(50);
-    buzzer=0;
-
     status=DataManager::init_filesystem();
     if(status != NODEFLOW_OK)
     {
@@ -554,7 +579,27 @@ int NodeFlow::initialise()
     if (status != NODEFLOW_OK)
     {
         return status;
-    }   
+    }
+
+    DataManager_FileSystem::File_t Flags_File_t;
+    Flags_File_t.parameters.filename = Flags_n;
+    Flags_File_t.parameters.length_bytes = sizeof(FlagsCon::parameters);
+
+    status=DataManager::add_file(Flags_File_t, 1); 
+    if(status != NODEFLOW_OK)
+    {
+        return status;   
+    }
+
+    FlagsCon c_conf;
+    c_conf.parameters.flag=0;
+    c_conf.parameters.hold_time=0;
+
+    status = DataManager::overwrite_file_entries(Flags_n, c_conf.data, sizeof(c_conf.parameters));
+    if(status != NODEFLOW_OK) 
+    {
+        ErrorHandler(__LINE__,"Flags_n",status,__PRETTY_FUNCTION__);
+    } 
    
     return status;
 
@@ -728,14 +773,12 @@ void NodeFlow::set_scheduler(int latency, uint32_t& next_timediff)
     status= DataManager::get_total_written_file_entries(UserDefinedScheduler_n, entries);
 
     uint32_t timediff_temp=DAYINSEC;
-    uint32_t time_remainder=this->time_now();
-    time_remainder=fmod(time_remainder,86400);
+    uint32_t time_remainder=fmod(time(NULL),DAYINSEC);
     int32_t timediff=0;
     uint32_t next_sch_time=0; 
     uint32_t scheduled_times=0;
     uint16_t times;
-    uint8_t group_id=0;
-    uint8_t temp_group_id=0;
+    
     user_function=false;
     clock_synch= false;
     kick= false;
@@ -743,12 +786,12 @@ void NodeFlow::set_scheduler(int latency, uint32_t& next_timediff)
     int * foo;
     foo = new int [entries];
     int no_of_functions=0;
-    
+
     for (int i=0; i<entries; i++)
     {
         status = DataManager::read_file_entry(UserDefinedScheduler_n, i, u_conf.data, sizeof(u_conf.parameters));
         scheduled_times=u_conf.parameters.trigger_time;
-        scheduled_times=scheduled_times%DAYINSEC;
+        scheduled_times=fmod(scheduled_times,DAYINSEC);
         timediff=scheduled_times-time_remainder;
         if(timediff<0)
         {
@@ -803,7 +846,7 @@ void NodeFlow::set_scheduler(int latency, uint32_t& next_timediff)
         }
     }
     /**Check that its not more than 2 hours, 6600*/
-    if (timediff_temp>6600)  
+    if (timediff_temp>6600)  //6600
     {
         timediff_temp=6600;
         uck_flag.reset(0);
@@ -819,6 +862,16 @@ void NodeFlow::set_scheduler(int latency, uint32_t& next_timediff)
             status = DataManager::read_file_entry(UserDefinedScheduler_n, i, u_conf.data, sizeof(u_conf.parameters));
             if (foo[x]==i && x<no_of_functions)
             {
+                u_conf.parameters.trigger_time=fmod(u_conf.parameters.trigger_time+u_conf.parameters.interval_time, 86400);
+                if(u_conf.parameters.interval_time != 0)
+                {
+                    while(fmod(latency_here,86400)>u_conf.parameters.trigger_time)
+                    {
+                        u_conf.parameters.trigger_time=fmod(u_conf.parameters.trigger_time+u_conf.parameters.interval_time, 86400);
+                    }
+                }
+                u_conf.parameters.interval_time=u_conf.parameters.interval_time;
+                u_conf.parameters.f=u_conf.parameters.f;
 
                 if(x==0)
                 {
@@ -828,16 +881,6 @@ void NodeFlow::set_scheduler(int latency, uint32_t& next_timediff)
                 {
                     status = DataManager::append_file_entry(TempSchedulerConfig_n, u_conf.data, sizeof(u_conf.parameters));
                 }
-                u_conf.parameters.trigger_time=fmod(u_conf.parameters.trigger_time+u_conf.parameters.interval_time, 86400);
-                if(u_conf.parameters.trigger_time!=0)
-                {
-                    while(fmod(latency_here,86400)>u_conf.parameters.trigger_time)
-                    {
-                        u_conf.parameters.trigger_time=u_conf.parameters.trigger_time+u_conf.parameters.interval_time;
-                    }
-                }
-                u_conf.parameters.interval_time=u_conf.parameters.interval_time;
-                u_conf.parameters.f=u_conf.parameters.f;
                 x++;
             }
             else
@@ -851,6 +894,16 @@ void NodeFlow::set_scheduler(int latency, uint32_t& next_timediff)
         status = DataManager::truncate_file(UserDefinedScheduler_n, entries);
     }
 
+    FlagsCon c_conf;
+    c_conf.parameters.flag=int(uck_flag.to_ulong());
+    c_conf.parameters.hold_time=timediff_temp+time_now();
+
+    status = DataManager::overwrite_file_entries(Flags_n, c_conf.data, sizeof(c_conf.parameters));
+    if(status != NODEFLOW_OK) 
+    {
+        ErrorHandler(__LINE__,"Flags_n",status,__PRETTY_FUNCTION__);
+    } 
+
     debug("\r\nUser defined fun %d, ClockSynch: %d, KickWdg: %d\n", uck_flag.test(0), uck_flag.test(1), uck_flag.test(2));
     next_timediff=timediff_temp;
     latency_here=time_now()-latency_here;
@@ -862,7 +915,6 @@ void NodeFlow::set_scheduler(int latency, uint32_t& next_timediff)
 
 void NodeFlow::UploadNow(uint8_t filename)
 {
-    //_send(
     if(filename == 0)
     {
         uint8_t file=0;
@@ -917,13 +969,17 @@ void NodeFlow::UploadNow(uint8_t filename)
                 else
                 {
                     status=DataManager::delete_file_entries(file);
+                    if (status != NODEFLOW_OK)
+                    {
+                        debug("\r\nError in line No = %d, Status = %d\r\n",__LINE__, status);
+                    }
                 }
             }
         }
         status=_send_blocks();
         if (status < NODEFLOW_OK)
         {
-            debug("\r\nLine %d",__LINE__);
+            debug("\r\nError sending %d",__LINE__);
         }
         debug("\r\n");
     }
@@ -1270,7 +1326,7 @@ void NodeFlow::ErrorHandler(int line, const char* str1, int status,const char* s
             uint8_t error[3]={5,uint8_t(line),uint8_t(status)};
             _radio.send_message(219, error, 3);
         #endif /* BOARD == EARHART_V1_0_0 */
-        NVIC_SystemReset();
+        //NVIC_SystemReset();
     }
 }
 

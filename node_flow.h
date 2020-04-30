@@ -444,7 +444,7 @@ union FilesConfig
     char data[sizeof(FilesConfig::parameters)];
 };
 
-typedef   int (NodeFlow::*fpointer)();
+typedef int (NodeFlow::*fpointer)();
 union MainScheduler //clock, kick watchdog //any other time based function within nodeflow
 {
     struct 
@@ -457,7 +457,7 @@ union MainScheduler //clock, kick watchdog //any other time based function withi
 
     char data[sizeof(MainScheduler::parameters)];
 };
-typedef   int (*fp)();
+typedef int (*fp)();
 union UserDefinedScheduler
 {
     struct 
@@ -483,7 +483,7 @@ union UserDefinedInterrupts
     char data[sizeof(UserDefinedInterrupts::parameters)];
 };
 
-/** Program specific flags. Every bit is a different flag. 0:SENSE, 1:SEND, 2:CLOCK, 3:KICK
+/** Program specific flags.
  */
 union FlagsConfig
 {
@@ -495,6 +495,17 @@ union FlagsConfig
     } parameters;
 
     char data[sizeof(FlagsConfig::parameters)];
+};
+
+union FlagsCon
+{
+    struct 
+    {    
+        time_t hold_time;
+        uint16_t flag;
+    } parameters;
+
+    char data[sizeof(FlagsCon::parameters)];
 };
 
 union ErrorConfig
@@ -520,6 +531,7 @@ enum Filenames
     MainScheduler_n                 = 5,
     UserDefinedScheduler_n          = 6,
     UserDefinedInterrupts_n         = 7,
+    Flags_n                         = 8, 
 
  };
 
