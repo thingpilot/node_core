@@ -132,156 +132,163 @@ void NodeFlow::start()
 
     bool initialised = false;
     status = DataManager::is_initialised(initialised);
-    if(button_on || !initialised)
-    {
+    // if(button_on || !initialised) //todo: removed for radiator board because different button
+    // {
         initialised = false;
         while(!initialised)
         {   
             status = initialise();
             DataManager::is_initialised(initialised);
+            #if BOARD == WRIGHT_V1_0_0
+                initialise_nbiot();
+            #endif /* #if BOARD == WRIGHT_V1_0_0 */
             debug("\r\n----------------------SETUP-----------------------\r");
             setup(); /** Pure virtual by the user */
         }
-    }
+    // }
     timetodate(time_now());
     if (status != NODEFLOW_OK)
     { 
         NVIC_SystemReset(); 
     }
-    for( ; ;) //todo: sometimes brakes out of loop (infinite loop!!!!! probably wrong address after stop mode)
+    while(true) //todo: sometimes brakes out of loop (infinite loop!!!!! probably wrong address after stop mode)
     {
-        Serial a(TP_PC_TXU,TP_PC_RXU);
-        DataManager dm(TP_EEPROM_WC, TP_I2C_SDA, TP_I2C_SCL, 100000); 
-        TP_Sleep_Manager::WakeupType_t wkp = sleep_manager.get_wakeup_type();
-
-        int latency = 0;
-        int status = 0;
-        uint32_t next_time = 0;
-        uint8_t send_block_number = 0;
-        uint8_t total_blocks = 0;
-
-        watchdog.kick();
-        time_t start_time = time_now();
-
-        FlagsCon f_conf;
-        status = DataManager::read_file_entry(Flags_n, 0, f_conf.data,sizeof(f_conf.parameters));
-        if(status != NODEFLOW_OK)
+        debug("\r\nINFINITE LOOP STARTS");
+        while(true) //todo: sometimes brakes out of loop (infinite loop!!!!! probably wrong address after stop mode)
         {
-            ErrorHandler(__LINE__,"FlagUCKonfig",status,__PRETTY_FUNCTION__);
-        }
+            Serial a(TP_PC_TXU,TP_PC_RXU);
+            DataManager dm(TP_EEPROM_WC, TP_I2C_SDA, TP_I2C_SCL, 100000); 
+            TP_Sleep_Manager::WakeupType_t wkp = sleep_manager.get_wakeup_type();
 
-        bitset<8> uck_flag(f_conf.parameters.flag);
+            int latency = 0;
+            int status = 0;
+            uint32_t next_time = 0;
+            uint8_t send_block_number = 0;
+            uint8_t total_blocks = 0;
 
-        if(wkp == TP_Sleep_Manager::WakeupType_t::WAKEUP_RESET || wkp == TP_Sleep_Manager::WakeupType_t::WAKEUP_SOFTWARE) 
-        {
-            status = DataManager::init_gstats();
-            _test_provision();
-            debug("\r\n----------------------START----------------------\r\n");
+            watchdog.kick();
+            time_t start_time = time_now();
 
-            #if BOARD == WRIGHT_V1_0_0
-                initialise_nbiot();
-            #endif /* #if BOARD == WRIGHT_V1_0_0 */
-            //if hold time !=0 then 
-            if(f_conf.parameters.hold_time != 0) //todo
+            FlagsCon f_conf;
+            status = DataManager::read_file_entry(Flags_n, 0, f_conf.data,sizeof(f_conf.parameters));
+            if(status != NODEFLOW_OK)
             {
-                if(time(NULL) < 1588089985)
-                {
-                    //the time is wrong update with the last you remember?
-                    set_time(f_conf.parameters.hold_time);
-                }
-                time_t time_after_false_wakeup = f_conf.parameters.hold_time-time_now();
-                next_time = time_after_false_wakeup;
+                ErrorHandler(__LINE__,"FlagUCKonfig",status,__PRETTY_FUNCTION__);
             }
-            else
-            {
-                latency = time_now() - start_time;
-                set_scheduler(latency, next_time);
-            }
-        }
 
-        if(wkp == TP_Sleep_Manager::WakeupType_t::WAKEUP_PIN)
-        { 
-            debug("\r\n--------------------PIN WAKEUP--------------------\r\n");
-            tformatter.setup();
-            UserDefinedInterrupts u_conf;
-            int entries = 0;
-            status = DataManager::get_total_written_file_entries(UserDefinedInterrupts_n, entries);
-            for(int i = 0; i < entries; i++)
+            bitset<8> uck_flag(f_conf.parameters.flag);
+
+            if(wkp == TP_Sleep_Manager::WakeupType_t::WAKEUP_RESET || wkp == TP_Sleep_Manager::WakeupType_t::WAKEUP_SOFTWARE) 
             {
-                status = DataManager::read_file_entry(UserDefinedInterrupts_n, i, u_conf.data, sizeof(u_conf.parameters));
-                DigitalIn interrupt(u_conf.parameters.pin);
-                if(interrupt.read())
+                status = DataManager::init_gstats();
+                _test_provision();
+                debug("\r\n----------------------START----------------------\r\n");
+
+                
+                //if hold time !=0 then 
+                if(f_conf.parameters.hold_time != 0) //todo
                 {
-                    debug("Interrupt Detected, priority %d \r\n",i); 
-                    u_conf.parameters.f();
-                }
-            }
-            time_t time_after_false_wakeup = hold_time - time_now();
-            next_time = time_after_false_wakeup;
-        }
-        if(wkp == TP_Sleep_Manager::WakeupType_t::WAKEUP_TIMER) 
-        {
-            if(uck_flag.test(2))//kick==true) //remove the pin wakeup?? //pin_wakeup==true ||
-            {
-                debug("\r\n-------------------KICK WDG-------------------\r\n");
-                // time_t time_after_false_wakeup=hold_time-time_now();
-                // next_time=time_after_false_wakeup;
-                //kick=false;
-                latency = time_now() - start_time;
-                set_scheduler(latency, next_time);
-            }
-            else 
-            {
-                debug("\r\n-------------------TIMER WAKEUP-------------------\r\n");
-                timetodate(time_now());
-                if(uck_flag.test(1))//clock_synch==true)
-                {
-                    get_timestamp();
-                    clock_synch = false;
-                }
-                if(uck_flag.test(0))//user_function==true)
-                {
-                    tformatter.setup();
-                    int entries = 0;
-                    UserDefinedScheduler u_conf;
-                    status = DataManager::get_total_written_file_entries(TempSchedulerConfig_n, entries);
-                    debug("\r\nFunctions %d\r\n",entries);
-                    for(int i = 0; i < entries; i++)
+                    if(time(NULL) < 1588089985)
                     {
-                        status = DataManager::read_file_entry(TempSchedulerConfig_n, i, u_conf.data, sizeof(u_conf.parameters));
+                        //the time is wrong update with the last you remember?
+                        set_time(f_conf.parameters.hold_time);
+                    }
+                    time_t time_after_false_wakeup = f_conf.parameters.hold_time-time_now();
+                    next_time = time_after_false_wakeup;
+                }
+                else
+                {
+                    latency = time_now() - start_time;
+                    set_scheduler(latency, next_time);
+                }
+            }
+
+            if(wkp == TP_Sleep_Manager::WakeupType_t::WAKEUP_PIN)
+            { 
+                debug("\r\n--------------------PIN WAKEUP--------------------\r\n");
+                tformatter.setup();
+                UserDefinedInterrupts u_conf;
+                int entries = 0;
+                status = DataManager::get_total_written_file_entries(UserDefinedInterrupts_n, entries);
+                for(int i = 0; i < entries; i++)
+                {
+                    status = DataManager::read_file_entry(UserDefinedInterrupts_n, i, u_conf.data, sizeof(u_conf.parameters));
+                    DigitalIn interrupt(u_conf.parameters.pin);
+                    if(interrupt.read())
+                    {
+                        debug("Interrupt Detected, priority %d \r\n",i); 
                         u_conf.parameters.f();
                     }
                 }
-                latency = time_now()-start_time;
-                set_scheduler(latency, next_time);
+                time_t time_after_false_wakeup = hold_time - time_now();
+                next_time = time_after_false_wakeup;
             }
-        }
-        
-        if(wkp == TP_Sleep_Manager::WakeupType_t::WAKEUP_UNKNOWN)
-        {
-            debug("\r\nWAKEUP_UNKNOWN\r\n");
-            time_t time_after_false_wakeup = hold_time-time_now();
-            next_time = time_after_false_wakeup;
-            debug("Next time, time_after_false_wakeup %d", next_time);
-        }
-        int neg_next_time = next_time;
-        if(neg_next_time < 0)
-        {
-            next_time = 1;
-        }
-        debug("\nGoing to sleep for %d s.\nWakeup at ", next_time);
-        timetodate(next_time+time_now());
-        bool wp = true;
-        #if(INTERRUPT_ON) //todo: bug
-            if(next_time < 15) //to prevent more delays
+            if(wkp == TP_Sleep_Manager::WakeupType_t::WAKEUP_TIMER) 
             {
-               wp = false;
+                if(uck_flag.test(2))//kick==true) //remove the pin wakeup?? //pin_wakeup==true ||
+                {
+                    debug("\r\n-------------------KICK WDG-------------------\r\n");
+                    // time_t time_after_false_wakeup=hold_time-time_now();
+                    // next_time=time_after_false_wakeup;
+                    //kick=false;
+                    latency = time_now() - start_time;
+                    set_scheduler(latency, next_time);
+                }
+                else 
+                {
+                    debug("\r\n-------------------TIMER WAKEUP-------------------\r\n");
+                    timetodate(time_now());
+                    if(uck_flag.test(1))//clock_synch==true)
+                    {
+                        get_timestamp();
+                        clock_synch = false;
+                    }
+                    if(uck_flag.test(0))//user_function==true)
+                    {
+                        tformatter.setup();
+                        int entries = 0;
+                        UserDefinedScheduler u_conf;
+                        status = DataManager::get_total_written_file_entries(TempSchedulerConfig_n, entries);
+                        debug("\r\nFunctions %d\r\n",entries);
+                        for(int i = 0; i < entries; i++)
+                        {
+                            status = DataManager::read_file_entry(TempSchedulerConfig_n, i, u_conf.data, sizeof(u_conf.parameters));
+                            u_conf.parameters.f();
+                        }
+                    }
+                    latency = time_now()-start_time;
+                    set_scheduler(latency, next_time);
+                }
             }
-        #endif
-        #if(!INTERRUPT_ON)
-            wp = false;
-        #endif 
-           sleep_manager.stop(next_time, wp);
+            
+            if(wkp == TP_Sleep_Manager::WakeupType_t::WAKEUP_UNKNOWN)
+            {
+                debug("\r\nWAKEUP_UNKNOWN\r\n");
+                time_t time_after_false_wakeup = hold_time-time_now();
+                next_time = time_after_false_wakeup;
+                debug("Next time, time_after_false_wakeup %d", next_time);
+            }
+            int neg_next_time = next_time;
+            if(neg_next_time < 0)
+            {
+                next_time = 1;
+            }
+            debug("\nGoing to sleep for %d s.\nWakeup at ", next_time);
+            timetodate(next_time+time_now());
+            bool wp = true;
+            #if(INTERRUPT_ON) //todo: bug
+                if(next_time < 15) //to prevent more delays
+                {
+                wp = false;
+                }
+            #endif
+            #if(!INTERRUPT_ON)
+                wp = false;
+            #endif 
+            sleep_manager.stop(next_time, wp);
+        }
+        //should neverrrrr reach here
+                debug("\r\nBRAKE OUT OF THE LOOP???\r\n");
     }
 }
 
