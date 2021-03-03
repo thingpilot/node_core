@@ -93,7 +93,7 @@ int NodeFlow::get_timestamp()
 
     if (unix_time > time(NULL))
     {
-        debug("\r\nReceived value: %d\n",unix_time);
+        debug("\r\nReceived value: %d\n", unix_time);
         set_time(unix_time);
     }
    return NODEFLOW_OK;   
@@ -132,8 +132,8 @@ void NodeFlow::start()
 
     bool initialised = false;
     status = DataManager::is_initialised(initialised);
-    // if(button_on || !initialised) //todo: removed for radiator board because different button
-    // {
+    if(button_on || !initialised) //todo: removed for radiator board because different button
+    {
         initialised = false;
         while(!initialised)
         {   
@@ -145,7 +145,7 @@ void NodeFlow::start()
             debug("\r\n----------------------SETUP-----------------------\r");
             setup(); /** Pure virtual by the user */
         }
-    // }
+    }
     timetodate(time_now());
     if (status != NODEFLOW_OK)
     { 
@@ -183,9 +183,7 @@ void NodeFlow::start()
                 status = DataManager::init_gstats();
                 _test_provision();
                 debug("\r\n----------------------START----------------------\r\n");
-
-                
-                //if hold time !=0 then 
+                //if hold time != 0 then 
                 if(f_conf.parameters.hold_time != 0) //todo
                 {
                     if(time(NULL) < 1588089985)
@@ -193,7 +191,7 @@ void NodeFlow::start()
                         //the time is wrong update with the last you remember?
                         set_time(f_conf.parameters.hold_time);
                     }
-                    time_t time_after_false_wakeup = f_conf.parameters.hold_time-time_now();
+                    time_t time_after_false_wakeup = f_conf.parameters.hold_time - time_now();
                     next_time = time_after_false_wakeup;
                 }
                 else
@@ -256,7 +254,7 @@ void NodeFlow::start()
                             u_conf.parameters.f();
                         }
                     }
-                    latency = time_now()-start_time;
+                    latency = time_now() - start_time;
                     set_scheduler(latency, next_time);
                 }
             }
@@ -279,7 +277,7 @@ void NodeFlow::start()
             #if(INTERRUPT_ON) //todo: bug
                 if(next_time < 15) //to prevent more delays
                 {
-                wp = false;
+                    wp = false;
                 }
             #endif
             #if(!INTERRUPT_ON)
@@ -288,7 +286,7 @@ void NodeFlow::start()
             sleep_manager.stop(next_time, wp);
         }
         //should neverrrrr reach here
-                debug("\r\nBRAKE OUT OF THE LOOP???\r\n");
+        debug("\r\nOH OH BRAKE OUT OF THE LOOP???!! \r\n");
     }
 }
 
@@ -303,7 +301,6 @@ void NodeFlow::attachInterval(int (*user_def_function)(), uint32_t interval)
     {
         debug("\r\nstatus %d", status); //errorhandler
     }
-
 }
 
 void NodeFlow::attachSchedule(int (*user_def_function)(), float schedule_array[], int arr_size)
@@ -321,9 +318,7 @@ void NodeFlow::attachSchedule(int (*user_def_function)(), float schedule_array[]
             debug("\r\nstatus %d", status);
         }
     }
-   
     ThisThread::sleep_for(1000);
-
 }
 
 void NodeFlow::attachInterrupt(int (*user_def_function)(), PinName pin)
@@ -337,7 +332,6 @@ void NodeFlow::attachInterrupt(int (*user_def_function)(), PinName pin)
     {
         debug("\r\nstatus %d", status);
     }
-
 }
 
 void NodeFlow::printSchedule()
@@ -595,8 +589,8 @@ int NodeFlow::initialise()
     }
 
     FlagsCon c_conf;
-    c_conf.parameters.flag=0;
-    c_conf.parameters.hold_time=0;
+    c_conf.parameters.flag = 0;
+    c_conf.parameters.hold_time = 0;
 
     status = DataManager::overwrite_file_entries(Flags_n, c_conf.data, sizeof(c_conf.parameters));
     if(status != NODEFLOW_OK) 
@@ -619,12 +613,12 @@ void NodeFlow::getDevAddr()
         debug("\r\n");
     for(int i = 0; i < 8; i++)
     {
-        debug("%02x",dev_conf.parameters.device_eui[i]);
+        debug("%02x", dev_conf.parameters.device_eui[i]);
     }
     debug("\r\n");
     for(int i = 0; i < 8; i++)
     {
-        debug("%02x",dev_conf.parameters.application_eui[i]);
+        debug("%02x", dev_conf.parameters.application_eui[i]);
     }
     debug("\r\n");
     for(int i = 0; i < 16; i++)
@@ -1180,9 +1174,12 @@ int NodeFlow::_send_blocks()
 
     #if BOARD == EARHART_V1_0_0
         
-        status=_radio.send_message(total_blocks+1, buffer, buffer_len);
+        status = _radio.send_message(total_blocks+1, buffer, buffer_len);
+        debug("\r\nSEND STATUS :%d",status);
         if (status < NODEFLOW_OK)
         {
+            delete [] buffer;
+            delete [] recv_data;
             return SEND_FAILED;
         }
         handle_receive(); //todo: The rx window closes too soon..
